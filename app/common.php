@@ -179,7 +179,7 @@ function redis_get_user_win_money($user_id, $table_id)
 {
     $key = 'user_win_money_user_' . $user_id . '_table_' . $table_id;
     $data = redis()->get($key);
-    return $data ? $data : '';
+    return $data ? $data : 0;
 }
 
 /**
@@ -191,5 +191,5 @@ function redis_get_table_opening_count_down($table_id)
 {
     $key = 'table_opening_count_down_table_' . $table_id;
     $data = redis()->get($key);
-    return $data ? $data : '';
+    return $data ? $data : 0;
 }

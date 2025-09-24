@@ -9,7 +9,7 @@ use app\model\Luzhu;
 use app\model\UserModel;
 use app\model\MoneyLog;
 use app\job\MoneyLogInsert;
-use app\job\UserSettleTaskJob;
+use app\job\UserSettlementJob;
 use app\job\ZongHeMoneyJob;
 use think\facade\Db;
 use think\facade\Queue;
@@ -115,7 +115,7 @@ class CardSettlementService extends CardServiceBase
         ]);
         
         // 延迟1秒执行用户结算任务（避免数据冲突）
-        $queue = Queue::later(1, UserSettleTaskJob::class, $post, 'bjl_open_queue');
+        $queue = Queue::later(1, UserSettlementJob::class, $post, 'bjl_open_queue');
         if ($queue == false) {
             LogHelper::error('结算任务分发失败');
             show([], 0, 'dismiss job queue went wrong');
@@ -498,7 +498,7 @@ class CardSettlementService extends CardServiceBase
         LogHelper::debug('开始后续处理任务');
         
         // 延迟2秒执行资金日志写入任务
-        Queue::later(2, MoneyLogInsert::class, $post, 'bjl_money_log_queue');
+        Queue::later(1, MoneyLogInsert::class, $post, 'bjl_money_log_queue');
         LogHelper::debug('资金日志写入任务已加入队列');
 
         // 清理临时投注记录

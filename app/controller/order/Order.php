@@ -52,11 +52,10 @@ class Order extends OrderBase
         ]);
 
         $find = Table::page_one($table_id);
+        $table_opening_count_down = redis_get_table_opening_count_down($table_id);
         if (empty($find)) show([], config('ToConfig.http_code.error'), 'table does not exist');                // 台桌不存在
         if ($find['status'] != 1) show([], config('ToConfig.http_code.error'), 'table stop');          // 台桌非运营状态
-        $find = Table::table_opening_count_down($find);
-        if ($find['run_status'] != 1 || $find['end_time'] <= 0) show([], config('ToConfig.http_code.error'), 'opening card');// 台桌开牌中，禁止投注
-
+        if ($find['run_status'] != 1 || $table_opening_count_down <= 0) show([], config('ToConfig.http_code.error'), 'opening card');// 台桌开牌中，禁止投注
 
         if (cache('cache_post_order_bet_' . self::$user['id'])) {
             show([],config('ToConfig.http_code.error'), '1秒不能重复操作');

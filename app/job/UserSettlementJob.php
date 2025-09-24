@@ -8,10 +8,10 @@ use think\queue\Job;
 
 /**
  * 开牌后用户结算
- * Class UserSettleTaskJob
+ * Class UserSettlementJob
  * @package app\job
  */
-class UserSettleTaskJob
+class UserSettlementJob
 {
     public function fire(Job $job, $data = null)
     {

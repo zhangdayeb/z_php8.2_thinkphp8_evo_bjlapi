@@ -6,7 +6,7 @@ use app\controller\common\LogHelper;
 use app\BaseController;
 use app\model\Luzhu;
 use app\model\Table;
-use app\job\TableEndTaskJob;
+use app\job\TableStartJob;
 use app\service\CardSettlementService;
 use app\validate\BetOrder as validates;
 use think\exception\ValidateException;
@@ -327,15 +327,12 @@ public function get_user_info(): string
             'wash_status'=>0,
             'update_time' => time(),
         ];
-        $save = Table::where('id', $table_id)
-            ->update($data);
+        $save = Table::where('id', $table_id)->update($data);
         if (!$save) {
             show($data, config('ToConfig.http_code.error'));
         }
         $data['table_id'] = $table_id;
-        Queue::later($time, TableEndTaskJob::class, $data,'bjl_end_queue');
-        redis()->del('table_info_'.$table_id);
-        redis()->set('table_set_start_signal_'.$table_id,$table_id,$time+5);//储存redis
+        Queue::push(TableStartJob::class, $data,'bjl_start_queue');
         show($data);
     }
 
