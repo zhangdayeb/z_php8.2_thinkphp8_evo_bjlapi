@@ -7,92 +7,130 @@ use app\controller\common\LogHelper;
 require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../common.php';
 
-// 初始化一个worker容器，监听端口
+/**
+ * WebSocket服务器配置
+ * 监听端口：2003
+ * 协议：websocket
+ */
 $worker = new Worker('websocket://0.0.0.0:2003');
-// ====这里进程数必须必须必须设置为1 否则多进程通信 数据混乱====
+
+/**
+ * 进程数配置
+ * 重要：必须设置为1，避免多进程通信数据混乱
+ */
 $worker->count = 1;
-// 新增加一个属性，用来保存uid到connection的映射
+
+/**
+ * UID到连接的映射表
+ * 用于保存用户ID与连接实例的对应关系
+ */
 $worker->uidConnections = array();
 
-// 当有客户端发来消息时执行的回调函数
+/**
+ * 客户端消息处理回调
+ * 
+ * @param $connection 连接实例
+ * @param $data 客户端发送的数据
+ */
 $worker->onMessage = function ($connection, $data) use ($worker) {
-
-    // 记录请求数，达到一定数量后重启进程，防止内存泄漏  请求数达到10000后退出当前进程，主进程会自动重启一个新的进程
+    
+    // 请求计数器：达到10000次后重启进程，防止内存泄漏
     static $request_count;
     if (++$request_count > 10000) {
         Worker::stopAll();
     }
 
-    //  心跳检测
-    if($data == 'ping'){
+    // 心跳检测：响应客户端的ping请求
+    if ($data == 'ping') {
         return $connection->send('pong');
     }
 
-    // 解析客户端传过来的数据
+    // 解析客户端JSON数据
     $data = json_decode($data, true);
     $connection->lastMessageTime = time();
+    
+    // 参数验证：检查必要字段
     if (!isset($data['user_id']) || !isset($data['table_id']) || !isset($data['game_type'])) {
         return $connection->send('连接成功，参数错误');
     }
 
-    // 加入连接池
+    // 初始化连接：将新连接加入连接池
     if (!isset($connection->uid)) {
         $connection->uid = $data['user_id'];
         $connection->data_info = $data;
         $worker->uidConnections[$connection->uid] = $connection;
-        return $connection->send(json_encode(['code' => 200, 'msg' => '初始化链接成功'));
+        
+        return $connection->send(json_encode([
+            'code' => 200, 
+            'msg' => '初始化链接成功'
+        ]));
     }
 };
 
-// 添加定时任务 每秒发送
+/**
+ * Worker进程启动回调
+ * 初始化定时器任务
+ */
 $worker->onWorkerStart = function ($worker) {
     echo "Worker started, initializing timer...\n";
     
-    // 每秒执行的倒计时 
+    /**
+     * 定时任务：每秒执行一次
+     * 向所有连接的客户端推送游戏数据
+     */
     Timer::add(1, function () use ($worker) {
         try {
-            // 如果没有连接，直接返回
+            // 无连接时直接返回
             if (empty($worker->connections)) {
                 return;
-            }            
-           
-            // 每秒遍历所有的链接用户
+            }
+            
+            // 遍历所有活跃连接
             foreach ($worker->connections as $key => &$connection) {
-                // 获取链接用户数据
+                // 获取连接的用户数据
                 $data = isset($connection->data_info) ? $connection->data_info : '';
-                if (empty($data)) { 
+                if (empty($data)) {
                     continue;
                 }
+                
                 $user_id = $data['user_id'];
-                $table_id = $data['table_id'];                
+                $table_id = $data['table_id'];
+                
                 try {
-
-                    // 牌型数据 获取当局开牌牌型 从 redis 获取 
+                    /**
+                     * 从Redis获取游戏数据 每个人 链接的 桌子 数据 都可能不一样
+                     */
+                    // 获取当局开牌牌型
                     $pai_info = redis_get_pai_info($table_id);
-                    // 牌型数据 获取当局开牌牌型 从 redis 获取 
+                    
+                    // 获取临时牌型数据
                     $pai_info_temp = redis_get_pai_info_temp($table_id);
-                    // 中奖金额 获取用户中奖金额 从 redis 获取
+                    
+                    // 获取用户中奖金额
                     $win_or_loss_info = redis_get_payout_money($user_id, $table_id);
-                    // 牌型数据 获取当局开牌牌型 从 redis 获取 
+                    
+                    // 获取开牌倒计时
                     $table_opening_count_down = redis_get_table_opening_count_down($table_id);
 
-                    // 执行最后的发送数据
+                    // 向客户端推送数据
                     $connection->send(json_encode([
-                            'code' => 200, 
-                            'msg' => 'WebSocket 返回信息',
-                            'pai_info' => $pai_info,                            
-                            'pai_info_temp' => $pai_info_temp,
-                            'win_or_loss_info' => $win_or_loss_info,
-                            'table_opening_count_down' => $table_opening_count_down
-                        ]));
-                } catch (\Exception $e) {                   
-                    // 记录错误日志 单个连接处理出错，继续处理其他连
+                        'code' => 200,
+                        'msg' => 'WebSocket 返回信息',
+                        'pai_info' => $pai_info,
+                        'pai_info_temp' => $pai_info_temp,
+                        'win_or_loss_info' => $win_or_loss_info,
+                        'table_opening_count_down' => $table_opening_count_down
+                    ]));
+                    
+                } catch (\Exception $e) {
+                    // 单个连接处理异常：记录错误并继续处理其他连接
                     error_log("Error processing connection: " . $e->getMessage());
                     continue;
                 }
             }
+            
         } catch (\Exception $e) {
-            //  全局定时器错误，停止所有worker进程
+            // 全局定时器异常：停止所有Worker进程
             error_log("Timer fatal error: " . $e->getMessage());
             Worker::stopAll();
             exit(1);
@@ -100,14 +138,19 @@ $worker->onWorkerStart = function ($worker) {
     });
 };
 
-// 当有客户端连接断开时
+/**
+ * 客户端断开连接回调
+ * 清理连接资源
+ * 
+ * @param $connection 断开的连接实例
+ */
 $worker->onClose = function ($connection) use ($worker) {
     if (isset($connection->uid)) {
         $connection->close();
         unset($worker->uidConnections[$connection->uid]);
-        echo "user_id:".$connection->uid." 断开连接\n";
+        echo "user_id:" . $connection->uid . " 断开连接\n";
     }
 };
 
-// 运行所有的worker
+// 启动Worker进程
 Worker::runAll();
