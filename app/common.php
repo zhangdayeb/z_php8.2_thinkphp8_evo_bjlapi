@@ -1,9 +1,5 @@
 <?php
 
-use app\business\RequestUrl;
-use app\business\Curl;
-use app\controller\common\LogHelper;
-
 
 function redis()
 {
@@ -78,4 +74,30 @@ function get_config($name = null)
     return \app\model\SysConfig::where('name', $name)->find();
 }
 
+function redis_get_pai_info($table_id)
+{
+    $key = 'pai_info_table_' . $table_id;
+    $data = redis()->get($key);
+    return $data ? $data : '';
+}   
 
+function redis_get_pai_info_temp($table_id)
+{
+    $key = 'pai_info_temp_table_' . $table_id;
+    $data = redis()->get($key);
+    return $data ? $data : '';
+}   
+
+function redis_get_user_win_money($user_id, $table_id)
+{
+    $key = 'user_win_money_user_'.$user_id.'_table_' . $table_id;
+    $data = redis()->get($key);
+    return $data ? $data : '';
+}   
+
+function redis_get_table_opening_count_down($table_id)
+{
+    $key = 'table_opening_count_down_table_' . $table_id;
+    $data = redis()->get($key);
+    return $data ? $data : '';
+}   

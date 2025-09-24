@@ -107,7 +107,7 @@ $worker->onWorkerStart = function ($worker) {
                     $pai_info_temp = redis_get_pai_info_temp($table_id);
                     
                     // 获取用户中奖金额
-                    $win_or_loss_info = redis_get_payout_money($user_id, $table_id);
+                    $win_or_loss_info = redis_get_user_win_money($user_id, $table_id);
                     
                     // 获取开牌倒计时
                     $table_opening_count_down = redis_get_table_opening_count_down($table_id);
