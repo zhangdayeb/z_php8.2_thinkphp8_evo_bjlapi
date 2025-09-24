@@ -23,22 +23,40 @@ class MoneyLogInsert
 {
     public function fire(Job $job, $data = null)
     {
-        $res = $this->doJob($data);
-        if ($res) {
-            $job->delete();
-            return;
-        }
-        #逻辑执行结束
-        if ($job->attempts() > 3) {
-            $job->delete();
-            return;
+        try {
+            // 执行业务逻辑
+            $res = $this->doJob($data);
+            
+            if ($res) {
+                // 成功，删除任务
+                $job->delete();
+                return;
+            }
+            
+            // 失败，检查重试次数
+            if ($job->attempts() >= 3) {
+                // 超过3次，删除任务
+                $job->delete();
+            } else {
+                // 未超过3次，10秒后重试
+                $job->release(10);
+            }
+            
+        } catch (\Exception $e) {
+            // 异常处理
+            if ($job->attempts() >= 3) {
+                $job->delete();
+            } else {
+                $job->release(10);
+            }
         }
     }
 
     public function doJob($data)
     {
         // 这里执行 洗码 业务 资金日志等等 标记
+        
+        // 执行成功返回 true，失败返回 false
         return true;
     }
-
 }
