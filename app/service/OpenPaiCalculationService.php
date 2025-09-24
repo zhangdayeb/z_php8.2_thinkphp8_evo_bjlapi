@@ -132,6 +132,9 @@ class OpenPaiCalculationService
         $res['xian_point'] = $res['xian_point'] % 10;
         $res['lucky'] = $res['lucky'] % 10;
 
+        // 计算和局 退回本金
+
+        // 计算幸运六赔率 
         
         return $res;
     }

@@ -88,13 +88,8 @@ class CardSettlementService extends CardServiceBase
         // 2. Redis缓存设置 - 供实时推送使用
         // ========================================
         // 将开牌信息缓存到Redis，存储5秒供WebSocket推送
-        $redis_key = 'table_id_' . $post['table_id'] . '_' . $post['game_type'];
+        $redis_key = 'pai_info_table_' . $post['table_id'];
         redis()->set($redis_key, $post['result_pai'], 5);
-
-        LogHelper::debug('Redis开牌缓存设置成功', [
-            'redis_key' => $redis_key,
-            'ttl' => 5
-        ]);
 
         // ========================================
         // 3. 错误处理和状态检查
@@ -108,12 +103,8 @@ class CardSettlementService extends CardServiceBase
         // ========================================
         // 添加露珠ID到结算数据中
         $post['luzhu_id'] = $luzhuModel->id;
+        LogHelper::debug('开牌数据保存成功，露珠ID：' . $luzhuModel->id);
 
-        LogHelper::debug('开始分发结算任务', [
-            'luzhu_id' => $luzhuModel->id,
-            'delay' => 1
-        ]);
-        
         // 延迟1秒执行用户结算任务（避免数据冲突）
         $queue = Queue::later(1, UserSettlementJob::class, $post, 'bjl_jiesuan_queue');
         if ($queue == false) {
@@ -155,6 +146,7 @@ class CardSettlementService extends CardServiceBase
      */
     public function user_settlement($luzhu_id, $post): bool
     {
+        // 
         $startTime = microtime(true);
         
         // ========================================
