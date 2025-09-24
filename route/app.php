@@ -23,8 +23,6 @@ Route::rule('bjl/bet/history$', '/game.GameInfo/get_user_bet_history');
 Route::rule('bjl/bet/detail/(\d+)$', '/game.GameInfo/get_bet_detail');
 // 荷官手动开牌设置露珠数据
 Route::rule('bjl/get_table/post_data$', '/game.GetForeignTableInfo/set_post_data');
-// 获取扑克牌详细信息
-Route::rule('bjl/pai/info$', '/game.GetForeignTableInfo/get_pai_info');
 // 发送开局信号（开始投注倒计时）
 Route::rule('bjl/start/signal$', '/game.GetForeignTableInfo/set_start_signal');
 // 发送结束信号（停止投注）
@@ -41,8 +39,6 @@ Route::rule('bjl/get_table/clear_lu_zhu_one_table$', '/game.GetForeignTableInfo/
 Route::rule('bjl/bet/order$', '/order.Order/user_bet_order');
 // 获取用户当前投注记录
 Route::rule('bjl/current/record$', '/order.Order/order_current_record');
-// 获取指定露珠的扑克牌型信息
-Route::rule('bjl/game/poker$', '/game.GameInfo/get_poker_type');
 // 首页路由
 Route::rule('/$', '/index/index');
 

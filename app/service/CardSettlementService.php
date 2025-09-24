@@ -234,7 +234,7 @@ class CardSettlementService extends CardServiceBase
                 'record_id' => $value['id'],
                 'user_id' => $value['user_id'],
                 'bet_type' => $value['result'],
-                'bet_type_name' => $card->user_pai_chinese($value['result']),
+                'bet_type_name' => $this->user_pai_chinese($value['result']),
                 'bet_amount' => $value['bet_amt'],
                 'odds' => $value['game_peilv'],
                 'is_win' => $user_is_win_or_not
@@ -246,8 +246,8 @@ class CardSettlementService extends CardServiceBase
             $dataSaveRecords[$key] = [
                 // 详细描述：原详情 + 购买内容 + 开牌结果
                 'detail' => $value['detail']
-                    . '-购买：' . $card->user_pai_chinese($value['result'])
-                    . ',开：' . $card->pai_chinese($pai_result)
+                    . '-购买：' . $this->user_pai_chinese($value['result'])
+                    . ',开：' . $this->pai_chinese($pai_result)
                     . '|本次结果记录' . json_encode($pai_result),
                 'close_status' => 2,                    // 2=已结算
                 'user_id'      => $value['user_id'],    // 用户ID
@@ -562,7 +562,34 @@ class CardSettlementService extends CardServiceBase
             'shuffling_num' => $record['bet_amt']
         ];
     }
-
+    /**
+     * ========================================
+     * 将投注类型ID转换为中文描述
+     * ========================================
+     * 
+     * @param int $res 投注类型ID
+     * @return string 中文描述
+     */
+    private function user_pai_chinese(int $res): string
+    {
+        // 这个数组 可以根据 游戏类型 去 赔率表里面读取 这个位置 闲临时这样用了
+        $pai_names = [
+            1 => '大', 
+            2 => '闲对', 
+            3 => '幸运6', 
+            4 => '庄对', 
+            5 => '小', 
+            6 => '闲', 
+            7 => '和', 
+            8 => '庄',
+            9 => '龙7', 
+            10 => '熊8', 
+            11 => '大老虎', 
+            12 => '小老虎',
+        ];
+        
+        return $pai_names[$res] ?? '未知';
+    }
     /**
      * 自动累计用户洗码费到用户表
      * @param array $dataSaveRecords 结算记录数组
