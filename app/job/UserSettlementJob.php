@@ -15,15 +15,8 @@ class UserSettlementJob
 {
     public function fire(Job $job, $data = null)
     {
-        LogHelper::debug('=== 结算队列任务开始 ===', [
-            'attempt' => $job->attempts(),
-            'max_attempts' => 3,
-            'queue_name' => 'bjl_open_queue'
-        ]);
-        
+        LogHelper::debug('=== 结算队列任务开始 ===');        
         LogHelper::debug('任务数据', $data);
-
-        $info = $data;
 
         #逻辑执行
         $isJobDone = $this->doHelloJob($data);
@@ -36,7 +29,6 @@ class UserSettlementJob
         #逻辑执行结束
         if ($job->attempts() > 3) {
             LogHelper::error('结算队列任务失败 - 超过最大重试次数', [
-                'data' => $info,
                 'attempts' => $job->attempts()
             ]);
 
@@ -46,8 +38,7 @@ class UserSettlementJob
         }
 
         LogHelper::warning('结算队列任务失败 - 将重试', [
-            'attempt' => $job->attempts(),
-            'data' => $info
+            'attempt' => $job->attempts()
         ]);
 
         // ✅ 修复：明确返回 false 进行重试

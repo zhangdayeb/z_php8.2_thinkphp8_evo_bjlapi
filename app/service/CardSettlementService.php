@@ -115,13 +115,12 @@ class CardSettlementService extends CardServiceBase
         ]);
         
         // 延迟1秒执行用户结算任务（避免数据冲突）
-        $queue = Queue::later(1, UserSettlementJob::class, $post, 'bjl_open_queue');
+        $queue = Queue::later(1, UserSettlementJob::class, $post, 'bjl_jiesuan_queue');
         if ($queue == false) {
             LogHelper::error('结算任务分发失败');
             show([], 0, 'dismiss job queue went wrong');
         }
 
-        LogHelper::debug('结算任务分发成功', ['queue_name' => 'bjl_open_queue']);
         LogHelper::debug('=== 开牌服务完成 ===');
 
         return show([]);
