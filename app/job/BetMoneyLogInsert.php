@@ -7,7 +7,7 @@ use app\model\MoneyLog;
 
 use think\queue\Job;
 
-/**##############################不要了，走定时任务
+/**
  * 开牌之后主动写入资金记录
  * Class BetMoneyLogInsert
  * @package app\job

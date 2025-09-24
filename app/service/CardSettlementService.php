@@ -13,8 +13,6 @@ use app\job\UserSettleTaskJob;
 use app\job\ZongHeMoneyJob;
 use think\facade\Db;
 use think\facade\Queue;
-use think\db\exception\DbException;
-
 
 /**
  * ========================================
@@ -488,7 +486,7 @@ class CardSettlementService extends CardServiceBase
             $UserModel->commit();
             LogHelper::debug('用户余额更新事务完成');
 
-        } catch (DbException $e) {
+        } catch (\Exception $e) {
             $UserModel->rollback();
             LogHelper::error('用户余额更新失败', $e);
             return false;
