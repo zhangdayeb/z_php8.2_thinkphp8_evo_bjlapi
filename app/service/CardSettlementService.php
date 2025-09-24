@@ -89,7 +89,7 @@ class CardSettlementService extends CardServiceBase
         LogHelper::debug('开牌数据保存成功，露珠ID：' . $luzhuModel->id);
 
         // 延迟1秒执行用户结算任务（避免数据冲突）
-        $queue = Queue::later(1, UserSettlementJob::class, $post, 'bjl_jiesuan_queue');
+        $queue = Queue::push(UserSettlementJob::class, $post, 'bjl_jiesuan_queue');
         if ($queue == false) {
             LogHelper::error('结算任务分发失败');
             show([], 0, 'dismiss job queue went wrong');
