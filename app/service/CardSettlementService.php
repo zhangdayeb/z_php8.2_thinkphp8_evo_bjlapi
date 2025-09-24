@@ -8,7 +8,7 @@ use app\model\GameRecordsTemporary;
 use app\model\Luzhu;
 use app\model\UserModel;
 use app\model\MoneyLog;
-use app\job\MoneyLogInsert;
+use app\job\MoneyLogInsertJob;
 use app\job\UserSettlementJob;
 use app\job\ZongHeMoneyJob;
 use think\facade\Db;
@@ -136,7 +136,7 @@ class CardSettlementService extends CardServiceBase
         $this->cache_user_win_amount();
 
         // 结算用户资金变动
-        Queue::push(MoneyLogInsert::class, $this->search_array, 'bjl_money_log_queue');
+        Queue::push(MoneyLogInsertJob::class, $this->search_array, 'bjl_money_log_queue');
         // 结算完成时间记录
         $endTime = microtime(true);
         $duration = $endTime - $startTime;
@@ -150,7 +150,6 @@ class CardSettlementService extends CardServiceBase
     {
         $userWins = $this->GameRecords
             ->where($this->search_array)
-            // ->where('close_status', 2) // 已结算
             ->where('win_or_loss', 1) // 赢了
             ->field('user_id, SUM(win_amt) as total_win')
             ->group('user_id')
@@ -299,166 +298,4 @@ class CardSettlementService extends CardServiceBase
             $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
     }   
-    /**
-     * ========================================
-     * 根据输赢结果计算洗码费（新规则）
-     * ========================================
-     * 
-     * 洗码费规则：
-     * ✅ 输钱 + 非免佣：正常给洗码费
-     * ❌ 中奖：不给洗码费
-     * ❌ 输钱 + 免佣：不给洗码费  
-     * ❌ 和局：不给洗码费
-     * 
-     * @param array $record 投注记录
-     * @param bool $is_win 是否中奖
-     * @param array $pai_result 开牌结果
-     * @return array 包含洗码费和洗码量的数组
-     */
-    private function calculateRebate($record, $is_win, $pai_result): array
-    {
-        $is_tie = in_array(7, $pai_result['win_array']); // 是否和局
-
-        // 中奖：无洗码费
-        if ($is_win) {
-            return ['shuffling_amt' => 0, 'shuffling_num' => 0];
-        }
-
-        // 和局：庄闲投注退款，其他投注输钱但不给洗码费
-        if ($is_tie) {
-            return ['shuffling_amt' => 0, 'shuffling_num' => 0];
-        }
-        
-        // 免佣模式：无洗码费
-        if ($record['is_exempt'] == 1) {
-            return ['shuffling_amt' => 0, 'shuffling_num' => 0];
-        }
-        
-        // 非免佣模式且输钱：计算洗码费
-        $shuffling_rate = $record['shuffling_rate'] ?? 0.008; // 默认0.8%洗码率
-        return [
-            'shuffling_amt' => $record['bet_amt'] * $shuffling_rate,
-            'shuffling_num' => $record['bet_amt']
-        ];
-    }
-    /**
-     * ========================================
-     * 将投注类型ID转换为中文描述
-     * ========================================
-     * 
-     * @param int $res 投注类型ID
-     * @return string 中文描述
-     */
-    private function user_pai_chinese(int $res): string
-    {
-        // 这个数组 可以根据 游戏类型 去 赔率表里面读取 这个位置 闲临时这样用了
-        $pai_names = [
-            1 => '大', 
-            2 => '闲对', 
-            3 => '幸运6', 
-            4 => '庄对', 
-            5 => '小', 
-            6 => '闲', 
-            7 => '和', 
-            8 => '庄',
-            9 => '龙7', 
-            10 => '熊8', 
-            11 => '大老虎', 
-            12 => '小老虎',
-        ];
-        
-        return $pai_names[$res] ?? '未知';
-    }
-    /**
-     * 自动累计用户洗码费到用户表
-     * @param array $dataSaveRecords 结算记录数组
-     */
-    private function accumulateUserRebate($dataSaveRecords)
-    {
-        // 按用户汇总洗码费
-        $userRebates = [];
-        foreach ($dataSaveRecords as $record) {
-            if ($record['shuffling_amt'] > 0) {
-                $userId = $record['user_id'];
-                if (!isset($userRebates[$userId])) {
-                    $userRebates[$userId] = 0;
-                }
-                $userRebates[$userId] += $record['shuffling_amt'];
-            }
-        }
-        
-        // 批量更新用户洗码费
-        if (!empty($userRebates)) {
-            LogHelper::debug('开始累计用户洗码费', [
-                'user_count' => count($userRebates),
-                'total_rebate' => array_sum($userRebates)
-            ]);
-
-            foreach ($userRebates as $userId => $totalRebate) {
-                // 更新用户洗码费余额和累计洗码费
-                UserModel::where('id', $userId)
-                    ->inc('rebate_balance', $totalRebate)
-                    ->inc('rebate_total', $totalRebate)
-                    ->update();
-                
-                // 记录洗码费流水
-                $this->recordRebateLog($userId, $totalRebate);
-            }
-        }
-    }
-    /**
-     * 记录洗码费流水日志
-     * @param int $userId 用户ID
-     * @param float $amount 洗码费金额
-     */
-    private function recordRebateLog($userId, $amount)
-    {
-        MoneyLog::insert([
-            'uid' => $userId,
-            'type' => 1,
-            'status' => 602, // 洗码费自动累计
-            'money' => $amount,
-            'money_before' => 0, // 洗码费余额变动
-            'money_end' => $amount,
-            'source_id' => 0,
-            'mark' => '系统自动累计洗码费',
-            'create_time' => date('Y-m-d H:i:s')
-        ]);
-    }
-}
-
-/**
- * ========================================
- * 类使用说明和技术要点
- * ========================================
- * 
- * 1. 结算流程控制：
- *    - 开牌 -> 数据保存 -> Redis缓存 -> 异步结算 -> 推送结果
- *    - 使用队列异步处理，避免阻塞用户操作
- * 
- * 2. 数据一致性保证：
- *    - 使用数据库事务确保数据完整性
- *    - 用户余额更新时加锁防止并发问题
- *    - Redis缓存设置合理过期时间
- * 
- * 3. 特殊规则处理：
- *    - 幸运6：根据庄家牌数选择不同赔率
- *    - 免佣庄：庄6点赢只赔50%
- *    - 和局：庄闲投注退回本金
- *    - 洗码费：只有输钱且非免佣才给洗码费
- * 
- * 4. 性能优化：
- *    - 批量数据库操作减少IO次数
- *    - Redis队列异步处理日志写入
- *    - 合理的缓存策略提升响应速度
- * 
- * 5. 错误处理：
- *    - 完整的异常捕获和事务回滚
- *    - 队列任务失败重试机制
- *    - 数据校验和边界条件处理
- * 
- * 6. 洗码费新规则：
- *    - 只有用户输钱且选择非免佣模式时才给洗码费
- *    - 中奖、和局、免佣模式下都不给洗码费
- *    - 通过calculateRebate()方法统一处理洗码费逻辑
- */
+}    
