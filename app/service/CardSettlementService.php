@@ -6,16 +6,16 @@ use app\controller\common\LogHelper;
 use app\model\GameRecords;
 use app\model\GameRecordsTemporary;
 use app\model\Luzhu;
-// use app\model\LuzhuHeguan;
-use app\model\LuzhuPreset;
 use app\model\UserModel;
+use app\model\MoneyLog;
 use app\job\BetMoneyLogInsert;
 use app\job\UserSettleTaskJob;
-use think\db\exception\DbException;
+use app\job\ZongHeMoneyJob;
 use think\facade\Db;
 use think\facade\Queue;
-use app\job\ZongHeMoneyJob;
-use app\model\MoneyLog;
+use think\db\exception\DbException;
+
+
 /**
  * ========================================
  * 卡牌游戏结算服务类
@@ -56,11 +56,9 @@ class CardSettlementService extends CardServiceBase
      * 5. 记录开牌历史信息
      * 
      * @param array $post 开牌数据（系统处理后）
-     * @param array $HeguanLuzhu 荷官原始数据
-     * @param int $id 预设数据ID（0表示非预设开牌）
      * @return string JSON响应字符串
      */
-    public function open_game($post, $HeguanLuzhu, $id): string
+    public function open_game($post): string
     {
         LogHelper::debug('=== 开牌服务开始 ===', [
             'table_id' => $post['table_id'],
@@ -69,29 +67,17 @@ class CardSettlementService extends CardServiceBase
             'pu_number' => $post['pu_number']
         ]);
         
-        LogHelper::debug('开牌数据详情', [
-            'system_data' => $post,
-            'heguan_data' => $HeguanLuzhu,
-            'preset_id' => $id
-        ]);
-
         // ========================================
         // 1. 数据库事务处理 - 保存露珠记录
         // ========================================
         $luzhuModel = new Luzhu();
-        $save = false;
-        
-        LogHelper::debug('开始数据库事务');
-        
+        $save = false;        
+       
+        // 组合露珠数据
         // 开启数据库事务
         Db::startTrans();
         try {
-            // 保存系统露珠数据（可能包含预设结果）
-            $luzhuModel->save($post);
-            
-            // 保存荷官原始露珠数据（真实开牌结果）
-            // LuzhuHeguan::insert($HeguanLuzhu);
-            
+            $luzhuModel->save($post);                      
             $save = true;
             Db::commit();
         } catch (\Exception $e) {
@@ -117,11 +103,6 @@ class CardSettlementService extends CardServiceBase
         // ========================================
         if (!$save) {
             show([], 0, '开牌失败');
-        }
-
-        // 如果是预设开牌，更新预设状态为已使用
-        if ($id > 0) {
-            LuzhuPreset::IsStatus($id);
         }
 
         // ========================================

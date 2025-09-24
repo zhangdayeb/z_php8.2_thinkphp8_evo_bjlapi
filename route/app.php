@@ -4,11 +4,7 @@ use think\facade\Route;
 // 获取露珠列表数据
 Route::rule('bjl/get_table/get_data$', '/game.GetForeignTableInfo/get_lz_list');
 // 获取荷官端露珠数据
-Route::rule('bjl/get_table/get_hg_data$', '/game.GetForeignTableInfo/get_hg_lz_list');
-// 获取电投端露珠数据
-Route::rule('api/diantou/table/getData', '/game.GetForeignTableInfo/get_hg_data_list');
-// 获取电投端视频流地址
-Route::rule('api/diantou/table/getTableVideo', '/game.GetForeignTableInfo/get_hg_video_list');
+Route::rule('bjl/get_table/get_hg_data$', '/game.GetForeignTableInfo/get_lz_list');
 // 获取台桌视频流信息
 Route::rule('bjl/get_table/get_table_video', '/game.GetForeignTableInfo/get_table_video');
 // 获取台桌列表

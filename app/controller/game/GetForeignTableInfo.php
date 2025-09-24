@@ -5,7 +5,6 @@ namespace app\controller\game;
 use app\controller\common\LogHelper;
 use app\BaseController;
 use app\model\Luzhu;
-use app\model\LuzhuPreset;
 use app\model\Table;
 use app\job\TableEndTaskJob;
 use app\service\CardSettlementService;
@@ -124,22 +123,10 @@ public function get_user_info(): string
         show($returnData, 1);
     }
 
-    //获取荷官台桌露珠信息
-    public function get_hg_lz_list(): string
+   //获取台桌露珠信息
+    public function get_lz_list(): string
     {
-        
         $params = $this->request->param();
-       
-        $returnData = Luzhu::LuZhuList($params);
-        show($returnData, 1);
-    }
-
-    public function get_hg_data_list(): string
-    {
-        
-        $params = $this->request->param();
-       //查询台桌是否在洗桌状态
-       //获取台桌信息
         if(!isset($params['tableId']) || empty($params['tableId'])) return show([],1,'台桌ID不存在');
          $table  = Table::where('id',$params['tableId'])->find();
          if(empty($table)) return show([],1,'台桌不存在');
@@ -148,31 +135,6 @@ public function get_user_info(): string
                show([], 1);
          }
         $returnData = Luzhu::LuZhuList($params);
-        show($returnData, 1);
-    }
-    
-    public function get_hg_video_list(): string
-    {
-        
-        $params = $this->request->param();
-        //获取台桌信息
-        if(!isset($params['tableId']) || empty($params['tableId'])) return show([],1,'台桌ID不存在');
-        $table  = Table::where('id',$params['tableId'])->find();
-         if(empty($table)) return show([],1,'台桌不存在');
-         $table = $table->toArray();
-       $video_near = explode('=',$table['video_near']);
-       $video_far = explode('=',$table['video_far']);
-
-        show(['video_near'=>$video_near[1].$table['id'],'video_far'=>$video_far[1].$table['id']], 1);
-    }
-
-   //获取台桌露珠信息
-    public function get_lz_list(): string
-    {
-        $params = $this->request->param();
-        $tableId = $this->request->param('tableId',0);
-        if ($tableId <=0 ) show([], config('ToConfig.http_code.error'),'台桌ID必填');
-        $returnData = Luzhu::LuZhuList($params);        
         show($returnData, 1);
     }
 
@@ -255,31 +217,20 @@ public function get_user_info(): string
     {
 
         LogHelper::debug('===================================================');
+        LogHelper::debug('=== 开牌流程开始 接收到荷官开牌请求===');
         LogHelper::debug('===================================================');
-        LogHelper::debug('===================================================');
-        LogHelper::debug('===================================================');
-        LogHelper::debug('=== 开牌流程开始 ===');
-        LogHelper::debug('=== 开牌流程开始 ===');
-        LogHelper::debug('=== 开牌流程开始 ===');
-        LogHelper::debug('===================================================');
-        LogHelper::debug('===================================================');
-        LogHelper::debug('===================================================');
-        LogHelper::debug('===================================================');
-        LogHelper::debug('接收到荷官开牌请求', [
-            'ip' => request()->ip(),
-            'timestamp' => date('Y-m-d H:i:s')
-        ]);
-
-
+        LogHelper::debug('荷官原始参数', $params);
+        
+        //过滤数据
         $postField = 'gameType,tableId,xueNumber,puNumber,result,ext,pai_result';
         $params = $this->request->only(explode(',', $postField), 'param', null);
-        LogHelper::debug('荷官原始参数', $params);
-
+        //数据验证
         try {
             validate(validates::class)->scene('lz_post')->check($params);
         } catch (ValidateException $e) {
             return show([], config('ToConfig.http_code.error'), $e->getError());
         }
+        //查询是否重复上传
         $map = array();
         $map['status'] = 1;
         $map['table_id'] = $params['tableId'];
@@ -291,38 +242,13 @@ public function get_user_info(): string
         $info = Luzhu::whereTime('create_time', 'today')->where('result','<>',0)->where($map)->find();
         if (!empty($info)) show($info, 0, '数据重复上传');
 
-        #####开始预设###########
-        //查询是否有预设的开牌信息
-        $presetInfo = LuzhuPreset::LuZhuPresetFind($map);
-        $map['update_time'] = $map['create_time'] = time();
-        $HeguanLuzhu = $map;
-
-        $id = 0;
-        if ($presetInfo){
-            //插入当前信息
-            $id = $presetInfo['id'];
-            $map['result'] = $presetInfo['result'];
-            $map['result_pai'] = $presetInfo['result_pai'];
-        }else{
-            //插入当前信息
-            $map['result'] = intval($params['result']) . '|' . intval($params['ext']);
-            $map['result_pai'] = json_encode($params['pai_result']);
-        }
-        //荷官正常露珠
-        $HeguanLuzhu['result'] = intval($params['result']) . '|' . intval($params['ext']);
-        $HeguanLuzhu['result_pai'] = json_encode($params['pai_result']);
-        #####结束预设###########
-
-
-        // 增加缓存删除
-        \think\facade\Cache::delete('luzhuinfo_'.$params['tableId']);
 
         // 根据游戏类型调用相应服务
         switch ($map['game_type']) {
             case 3:
                 LogHelper::debug('调用百家乐开牌服务', ['table_id' => $map['table_id']]);
                 $card = new CardSettlementService();
-                return $card->open_game($map, $HeguanLuzhu, $id);
+                return $card->open_game($map);
             default:
                 LogHelper::error('不支持的游戏类型', ['game_type' => $map['game_type']]);
                 show([], 404, 'game_type错误！');
