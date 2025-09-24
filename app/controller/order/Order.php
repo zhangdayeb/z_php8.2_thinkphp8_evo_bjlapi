@@ -131,7 +131,7 @@ class Order extends OrderBase
             $post_info[$key]['rate_info_id'] = $odds['id'];
             $post_info[$key]['rate_info_name'] = $odds['game_tip_name'];
             $post_info[$key]['rate_info_peilv'] = $odds['peilv'];
-            // 特殊投注值处理
+            // 免佣非免佣 庄 赔率特殊处理
             if ($odds['id'] == 8) {//是压的庄赢 ，，需要查看是否开启免佣
                 $array = explode('/', $odds['peilv']);
                 if ($is_exempt == 1) {//开启免佣
@@ -139,6 +139,10 @@ class Order extends OrderBase
                 } else {//没开免佣
                     $post_info[$key]['rate_info_peilv'] = $array[1];
                 }
+            }
+            // 幸运6 赔率特殊处理
+            if ($odds['id'] == 3) {//如果是幸运6 赔率先记作这些 后面调整计算
+                $post_info[$key]['rate_info_peilv'] = 12;
             }
             // 针对未获取到赔率的进行特殊提示
             if (!$post_info[$key]['rate_info']) show([],config('ToConfig.http_code.error'), 'please fill in the correct odds id');
@@ -190,6 +194,10 @@ class Order extends OrderBase
         $dec_money = 0;                             // 本次 用户投注扣除金额
         // 遍历本轮 投注数据
 
+                //洗码费 投注的金额 * 洗码的比例 = 洗码费 有代理就给代理，没有代理就返回给用户。
+                //洗码量 就是买的金额,相当于流水，给客户的记录，用来限制提款的，应该是。
+                //是否开启免佣。开起来没有洗码费
+                //洗码费[返佣] 不等于 洗码量[流水]
         foreach ($post_info as $key => $value) {
             $dec_money += $value['money'];          // 累计 用户投注数据
             $data[$key] = [
@@ -197,16 +205,11 @@ class Order extends OrderBase
                 'before_amt' => $user_money,                                                            // 下注前金额
                 'end_amt' => $user_money - $value['money'],                                             // 下注后金额
                 'bet_amt' => $value['money'],                                                           // 投注金额
-                'win_amt' => 0,                                                                         // 如果赢钱后的金额
-                //洗码费 投注的金额 * 洗码的比例 = 洗码费 有代理就给代理，没有代理就返回给用户。
-                //洗码量 就是买的金额,相当于流水，给客户的记录，用来限制提款的，应该是。
-                //是否开启免佣。开起来没有洗码费
-                //洗码费[返佣] 不等于 洗码量[流水]
+                'win_amt' => $value['rate_info_name'] * $value['money'],                                // 默认赢钱后的金额 暂时这样写 后面要重新计算
                 'shuffling_num' => $value['money'],                                                     // 洗码量
                 'shuffling_amt' => 0,                                                                   // 下注时先不计算，等结算时再算
-                'result' => $value['rate_info_id'],                                                     // 下注结果ID
                 'shuffling_rate' => self::$user['xima_lv'] / 100,                                       // 洗码率
-                'delta_amt' => -$value['money'],                                                        // 变化金额
+                'delta_amt' => 0,                                                                       // 变化金额
                 'table_id' => $table_id,                                                                // 投注台桌的ID
                 'xue_number' => $xue_number['xue_number'],                                              // 投注的靴号
                 'pu_number' => $xue_number['pu_number'],                                                // 投注的铺号
