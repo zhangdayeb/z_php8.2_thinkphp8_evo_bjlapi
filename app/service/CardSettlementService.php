@@ -26,7 +26,7 @@ class CardSettlementService extends CardServiceBase
 {
     // search_array 用于存储查询条件 tabe_id game_type xue_number pu_number
     public $search_array = [];
-    public $oddsModel = new GameRecords();
+    public $GameRecords = new GameRecords();
 
     /**
      * ========================================
@@ -129,342 +129,44 @@ class CardSettlementService extends CardServiceBase
         ]
         $luzhu_id = $post['luzhu_id'];
 
-        // 计算开牌结果
+        // 计算开牌结果 + 标记用户输赢
         $this->update_mysql_records_by_pai_info($post['result_pai']);
 
+        // 获取用户中奖金额 存入 redis 供前端查询
+        $this->cache_user_win_amount();
 
-        // ========================================
-        // 1. 查询本局投注记录
-        // ========================================
-              
+        // 结算用户资金变动
+        Queue::push(MoneyLogInsert::class, $this->search_array, 'bjl_money_log_queue');
+        // 结算完成时间记录
+        $endTime = microtime(true);
+        $duration = $endTime - $startTime;
+        LogHelper::debug('=== 用户结算完成 ===', ['duration' => $duration . ' seconds']);   
+            
 
-        LogHelper::debug('开始查询投注记录');
-        // 获取所有未结算的投注记录
-        $betRecords = $this->oddsModel
-            ->where([
-                'table_id'     => $post['table_id'],
-                'game_type'    => $post['game_type'],
-                'xue_number'   => $post['xue_number'],
-                'pu_number'    => $post['pu_number'],
-                'close_status' => 1, // 1=未结算，2=已结算
-            ])
+
+    }
+
+    private function cache_user_win_amount()
+    {
+        $userWins = $this->GameRecords
+            ->where($this->search_array)
+            // ->where('close_status', 2) // 已结算
+            ->where('win_or_loss', 1) // 赢了
+            ->field('user_id, SUM(win_amt) as total_win')
+            ->group('user_id')
             ->select()
             ->toArray();
 
-        LogHelper::debug('投注记录详情', $betRecords);
-
-        // ========================================
-        // 2. 初始化结算数据容器
-        // ========================================
-        $dataSaveRecords = [];  // 保存更新后的投注记录数据
-        $userSaveDataTemp = []; // 保存用户资金变动临时数据
-
-        // ========================================
-        // 3. 计算开牌结果
-        // ========================================
-
-
-        LogHelper::debug('开始逐笔投注结算');
-
-        // ========================================
-        // 4. 遍历投注记录进行结算计算
-        // ========================================
-        foreach ($betRecords as $key => $value) {
-            // 判断用户是否中奖
-            $user_is_win_or_not = $card->user_win_or_not(
-                intval($value['result']), 
-                $pai_result
-            );
-
-            LogHelper::debug('投注结算分析', [
-                'record_id' => $value['id'],
-                'user_id' => $value['user_id'],
-                'bet_type' => $value['result'],
-                'bet_type_name' => $this->user_pai_chinese($value['result']),
-                'bet_amount' => $value['bet_amt'],
-                'odds' => $value['game_peilv'],
-                'is_win' => $user_is_win_or_not
+        foreach ($userWins as $record) {
+            $redis_key = 'user_win_money_user_' . $record['user_id'] . '_table_' . $this->search_array['table_id'];
+            redis()->set($redis_key, $record['total_win'], 10); // 存储10秒
+            LogHelper::debug('Redis缓存--用户中奖金额--设置成功', [
+                'redis_key' => $redis_key,
+                'total_win' => $record['total_win'],
+                'ttl' => 10
             ]);
-
-            // ========================================
-            // 4.1 基础结算信息设置
-            // ========================================
-            $dataSaveRecords[$key] = [
-                // 详细描述：原详情 + 购买内容 + 开牌结果
-                'detail' => $value['detail']
-                    . '-购买：' . $this->user_pai_chinese($value['result'])
-                    . ',开：' . $this->pai_chinese($pai_result)
-                    . '|本次结果记录' . json_encode($pai_result),
-                'close_status' => 2,                    // 2=已结算
-                'user_id'      => $value['user_id'],    // 用户ID
-                'win_amt'      => 0,                    // 输赢金额默认0
-                'id'           => $value['id'],         // 投注记录ID
-                'lu_zhu_id'    => $luzhu_id,           // 关联露珠ID
-                'table_id'     => $value['table_id'],   // 台桌ID
-                'game_type'    => $value['game_type'],  // 游戏类型
-            ];
-
-            // ========================================
-            // 4.2 特殊赔率预处理
-            // ========================================
-            $tempPelv = intval($value['game_peilv']); // 默认赔率
-
-            // 用户投注幸运6：根据庄家牌数选择赔率
-            if ($value['result'] == 3) {
-                $pei_lv = explode('/', $value['game_peilv']); // 格式：12/20
-                if ($pai_result['luckySize'] == 2) {
-                    $tempPelv = intval($pei_lv[0]); // 2张牌赔率
-                } elseif ($pai_result['luckySize'] == 3) {
-                    $tempPelv = intval($pei_lv[1]); // 3张牌赔率
-                }
-            }
-
-            // 用户投注庄：免佣庄特殊处理
-            if ($value['result'] == 8) {
-                // 免佣庄特殊处理：庄6点赢只赔50%
-                if ($value['is_exempt'] == 1 ) {
-                    if($pai_result['zhuang_point'] == 6){
-                        $tempPelv = 0.5;
-                    }else{
-                        $tempPelv = 1;
-                    }
-                    
-                }else{
-                    $tempPelv = 0.95;
-                }
-            }
-
-            $dataSaveRecords[$key]['game_peilv'] = $tempPelv;
-            // 就是因为 押了庄才出现的问题
-            $moneyWinTemp = $tempPelv * $value['bet_amt']; // 中奖金额 = 赔率 × 本金
-
-            // ========================================
-            // 4.3 洗码费计算（新规则：输了才给）
-            // ========================================
-            $rebateResult = $this->calculateRebate($value, $user_is_win_or_not, $pai_result);
-            $dataSaveRecords[$key]['shuffling_amt'] = $rebateResult['shuffling_amt'];
-            $dataSaveRecords[$key]['shuffling_num'] = $rebateResult['shuffling_num'];
-
-            LogHelper::debug('洗码费计算结果', [
-                'user_id' => $value['user_id'],
-                'bet_amt' => $value['bet_amt'],
-                'is_win' => $user_is_win_or_not,
-                'is_exempt' => $value['is_exempt'],
-                'shuffling_amt' => $rebateResult['shuffling_amt'],
-                'shuffling_num' => $rebateResult['shuffling_num']
-            ]);
-            
-            // ========================================
-            // 4.4 输赢结算处理
-            // ========================================
-            if ($user_is_win_or_not) {
-                // --- 中奖处理 ---
-                $dataSaveRecords[$key]['win_amt'] = $moneyWinTemp;
-                $dataSaveRecords[$key]['delta_amt'] = $moneyWinTemp + $value['bet_amt']; // 返还 = 奖金 + 本金
-
-                // 用户资金变动记录
-                $userSaveDataTemp[$key] = [
-                    'money_balance_add_temp' => $dataSaveRecords[$key]['delta_amt'],
-                    'id'                     => $value['user_id'],
-                    'win'                    => $moneyWinTemp,
-                    'bet_amt'                => $value['bet_amt'],
-                ];
-
-                LogHelper::debug('中奖处理', [
-                    'user_id' => $value['user_id'],
-                    'win_amt' => $moneyWinTemp,
-                    'return_amt' => $dataSaveRecords[$key]['delta_amt']
-                ]);
-            } else {
-                // --- 未中奖处理 ---
-                $is_tie = in_array(7, $pai_result['win_array']); // 是否和局
-
-                if ($is_tie) {
-                    // 和局特殊处理：庄闲投注退回本金
-                    if ($value['result'] == 8 || $value['result'] == 6) {
-                        $userSaveDataTemp[$key] = [
-                            'money_balance_add_temp' => $value['bet_amt'], // 退回本金
-                            'id'                     => $value['user_id'],
-                            'win'                    => 0,
-                            'bet_amt'                => $value['bet_amt'],
-                        ];
-
-                        $dataSaveRecords[$key]['win_amt'] = 0;
-                        $dataSaveRecords[$key]['delta_amt'] = 0;
-                        $dataSaveRecords[$key]['agent_status'] = 1;
-                        $dataSaveRecords[$key]['shuffling_amt'] = 0;  // 和局无洗码费
-                        $dataSaveRecords[$key]['shuffling_num'] = 0;  // 和局无洗码量
-
-                        LogHelper::debug('和局退款处理', [
-                            'user_id' => $value['user_id'],
-                            'refund_amt' => $value['bet_amt']
-                        ]);
-                    } else {
-                        // 其他投注类型输掉本金
-                        $dataSaveRecords[$key]['win_amt'] = $value['bet_amt'] * -1;
-
-                        LogHelper::debug('和局其他投注输钱', [
-                            'user_id' => $value['user_id'],
-                            'loss_amt' => $value['bet_amt']
-                        ]);
-                    }
-                } else {
-                    // 正常输牌：输掉本金
-                    $dataSaveRecords[$key]['win_amt'] = $value['bet_amt'] * -1;
-
-                    LogHelper::debug('正常输牌处理', [
-                        'user_id' => $value['user_id'],
-                        'loss_amt' => $value['bet_amt'],
-                        'rebate_amt' => $dataSaveRecords[$key]['shuffling_amt']
-                    ]);
-                }
-            }
         }
-
-        // ========================================
-        // 5. 合并同用户的多笔投注
-        // ========================================
-        $user_save_data = [];
-        if (!empty($userSaveDataTemp)) {
-            foreach ($userSaveDataTemp as $v) {
-                if (array_key_exists($v['id'], $user_save_data)) {
-                    // 同用户多笔投注金额累加
-                    $user_save_data[$v['id']]['money_balance_add_temp'] += $v['money_balance_add_temp'];
-                } else {
-                    $user_save_data[$v['id']] = $v;
-                }
-            }
-        }
-
-        // ========================================
-        // 6. 生成派彩显示数据
-        // ========================================
-        if (!empty($dataSaveRecords)) {
-            $userCount = [];
-            
-            // 按用户汇总输赢金额
-            foreach ($dataSaveRecords as $v) {
-                if (array_key_exists($v['user_id'], $userCount)) {
-                    $userCount[$v['user_id']]['win_amt'] += $v['win_amt'];
-                } else {
-                    $userCount[$v['user_id']] = $v;
-                }
-            }
-
-            // 将派彩结果存入Redis，供客户端显示（存储300秒）
-            foreach ($userCount as $record) {
-                $redis_key = 'user_' . $record['user_id'] . '_table_id_' . $record['table_id'] . '_' . $record['game_type'];
-                redis()->set($redis_key, $record['win_amt'], 300);
-                LogHelper::debug('Redis缓存--骰宝派奖--设置成功', [
-                    'redis_key' => $redis_key,
-                    'ttl' => 30
-                ]);
-            }
-        }
-
-        // ========================================
-        // 7. 数据库事务处理 - 更新用户余额和投注记录
-        // ========================================
-        LogHelper::debug('开始用户余额更新事务');
-
-        $UserModel = new UserModel();
-        $UserModel->startTrans();
-        
-        try {
-            // 更新用户余额
-            if (!empty($userSaveDataTemp)) {
-                foreach ($userSaveDataTemp as $userData) {
-                    // 获取用户当前余额（加锁防止并发）
-                    $find = $UserModel->where('id', $userData['id'])->lock(true)->find();
-
-                    // 准备资金流水记录
-                    $moneyLog = [
-                        'money_before' => $find->money_balance,
-                        'money_end'    => $find->money_balance + $userData['money_balance_add_temp'],
-                        'uid'          => $userData['id'],
-                        'type'         => 1,
-                        'status'       => 503, // 百家乐结算
-                        'source_id'    => $luzhu_id,
-                        'money'        => $userData['money_balance_add_temp'],
-                        'create_time'  => date('Y-m-d H:i:s'),
-                        'mark'         => '下注结算--变化:' . $userData['money_balance_add_temp'] 
-                                        . '下注：' . $userData['bet_amt'] 
-                                        . '总赢：' . $userData['win']
-                    ];
-
-                    // 更新用户余额
-                    $user_update = $UserModel->where('id', $userData['id'])
-                        ->inc('money_balance', $userData['money_balance_add_temp'])
-                        ->update();
-
-                    // 如果余额更新成功，将资金记录推入Redis队列
-                    if ($user_update) {  // ✅ 改为正确的变量名
-                        redis()->LPUSH('bet_settlement_money_log', json_encode($moneyLog));
-                        
-                        // 分发钱包结算通知队列（立即执行，不延迟）
-                        Queue::push(ZongHeMoneyJob::class, [
-                            'type' => 'settle',
-                            'userData' => $userData,
-                            'luzhu_id' => $luzhu_id
-                        ], 'bjl_zonghemoney_log_queue');
-                    }
-                }
-            }
-
-            // 批量更新投注记录状态
-            if (!empty($dataSaveRecords)) {
-                $oddsModel->saveAll($dataSaveRecords);
-            }
-
-            
-            // ========================================
-            // 7.1. 自动累计用户洗码费
-            // ========================================
-            try {
-                $this->accumulateUserRebate($dataSaveRecords);
-                LogHelper::debug('洗码费累计完成');
-            } catch (\Exception $e) {
-                LogHelper::error('洗码费累计失败', $e);
-                // 不影响主流程，只记录错误
-            }
-
-            $UserModel->commit();
-            LogHelper::debug('用户余额更新事务完成');
-
-        } catch (\Exception $e) {
-            $UserModel->rollback();
-            LogHelper::error('用户余额更新失败', $e);
-            return false;
-        }
-
-        // ========================================
-        // 8. 后续处理任务
-        // ========================================
-        LogHelper::debug('开始后续处理任务');
-        
-        // 延迟2秒执行资金日志写入任务
-        Queue::later(1, MoneyLogInsert::class, $post, 'bjl_money_log_queue');
-        LogHelper::debug('资金日志写入任务已加入队列');
-
-        // 清理临时投注记录
-        GameRecordsTemporary::destroy(function($query) use ($post) {
-            $query->where('table_id', $post['table_id']);
-        });
-        LogHelper::debug('临时投注记录清理完成');
-
-        $endTime = microtime(true);
-        $duration = round(($endTime - $startTime) * 1000, 2);
-        
-        LogHelper::debug('=== 用户结算完成 ===', [
-            'luzhu_id' => $luzhu_id,
-            'duration_ms' => $duration,
-            'memory_usage_mb' => round(memory_get_usage() / 1024 / 1024, 2)
-        ]);
-
-
-
-        return true;
-    }
+    }   
 
     // 根据开牌信息更新投注记录
     private function update_mysql_records_by_pai_info($result_pai)
@@ -487,41 +189,114 @@ class CardSettlementService extends CardServiceBase
         $search_array = $this->search_array;
         $search_array['game_peilv_id'] = 2; // 闲对
         if($res['xian_dui'] == 1){
-
+            // 标记为赢了
+            $this->GameRecords->where($search_array)->update(['win_or_loss' => 1]);
+        }else{
+            // 标记为输了 默认就是输了 
+            $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
+
+
         $search_array['game_peilv_id'] = 3; // 幸运6
         if($res['lucky'] == 6){
-            if($res['luckySize'] == 2){
-                $peilv = 12; // 幸运6 二张牌
+            // 根据接近修改真实赔率
+            $peilv = ($res['luckySize'] == 3) ? 20 : 12; // 根据牌数选择赔率
+            $OrdersTemp = $this->GameRecords->where($search_array)->select();
+            foreach($OrdersTemp as $k => $v){
+                $v->win_amt = $v->money * $peilv;
+                $v->game_peilv = $peilv;
+                $v->save();
             }
-            if($res['luckySize'] == 3){
-                $peilv = 20; // 幸运6 三张牌
-            }
+            // 标记为赢了
+            $this->GameRecords->where($search_array)->update(['win_or_loss' => 1]);
+        }else{
+            // 标记为输了 默认就是输了 
+            $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
+
+
         $search_array['game_peilv_id'] = 4; // 庄对
         if($res['zhuang_dui'] == 1){
-
+            // 标记为赢了
+            $this->GameRecords->where($search_array)->update(['win_or_loss' => 1]);
+        }else{
+            // 标记为输了 默认就是输了 
+            $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
+
+
         $search_array['game_peilv_id'] = 6; // 闲
         if($res['result'] == 'xian'){
-
+            // 标记为赢了
+            $this->GameRecords->where($search_array)->update(['win_or_loss' => 1]);
+        }else{
+            // 标记为输了 默认就是输了 
+            $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
+
+
         $search_array['game_peilv_id'] = 7; // 和
         if($res['result'] == 'he'){
             // 退回本金 给庄闲
-
+            $tempSearch = $search_array;
+            unset($tempSearch['game_peilv_id']); 
+            $OrdersTemp = $this->GameRecords->where('game_peilv_id','between','6,8')->where($tempSearch)->select();
+            foreach($OrdersTemp as $k => $v){
+                $v->is_tie_money_return = 1;
+                $v->save();
+            }
+            // 标记为赢了
+            $this->GameRecords->where($search_array)->update(['win_or_loss' => 1]);
+        }else{
+            // 标记为输了 默认就是输了 
+            $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
+
+
         $search_array['game_peilv_id'] = 8; // 庄
-        if($res['result'] == 'xian'){
-
+        if($res['result'] == 'zhuang'){
+            // 根据免佣修改真实赔率
+            $peilv = 1;
+            $OrdersTemp = $this->GameRecords->where($search_array)->select();
+            foreach($OrdersTemp as $k => $v){
+                if($v->is_exempt == 1){
+                    if($res['zhuang_point'] == 6){
+                        $peilv = 0.5; // 免佣庄6点
+                    }else{
+                        $peilv = 1; // 免佣庄其他点数
+                    }       
+                }else{  
+                    $peilv = 0.95; // 非免佣庄
+                }
+                $v->win_amt = $v->money * $peilv;
+                $v->game_peilv = $peilv;
+                $v->save();
+            }
+            // 标记为赢了
+            $this->GameRecords->where($search_array)->update(['win_or_loss' => 1]);
+        }else{
+            // 标记为输了 默认就是输了 
+            $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
+
+
         $search_array['game_peilv_id'] = 9; // 龙7
         if($res['zhuang_point'] == 7 && $res['zhuang_count'] == 3){
-
+            // 标记为赢了
+            $this->GameRecords->where($search_array)->update(['win_or_loss' => 1]);
+        }else{
+            // 标记为输了 默认就是输了 
+            $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
+
+
         $search_array['game_peilv_id'] = 10; // 熊8
         if($res['xian_point'] == 8 && $res['xian_count'] == 3){
-
+            // 标记为赢了
+            $this->GameRecords->where($search_array)->update(['win_or_loss' => 1]);
+        }else{
+            // 标记为输了 默认就是输了 
+            $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
     }   
     /**

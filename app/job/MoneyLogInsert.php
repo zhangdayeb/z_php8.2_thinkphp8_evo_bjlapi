@@ -31,19 +31,7 @@ class MoneyLogInsert
 
     public function consumption()
     {
-        //获取资金记录redis
-        $list = redis()->LRANGE('bet_settlement_money_log',0, -1);
-        if (empty($list)) return true;
-        foreach ($list as $item => $value) {
-            $valueData = array();
-            $valueData = json_decode($value, true);
-           $insert = MoneyLog::insert($valueData);
-            if ($insert){
-                redis()->LREM('bet_settlement_money_log', $value);//删除当前已经计算过的值
-            }else{
-                return false;
-            }
-        }
+        // 这里执行 洗码 业务 资金日志等等 标记
         return true;
     }
 
