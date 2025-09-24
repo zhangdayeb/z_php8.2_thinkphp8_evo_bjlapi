@@ -8,7 +8,7 @@ use app\model\GameRecordsTemporary;
 use app\model\Luzhu;
 use app\model\UserModel;
 use app\model\MoneyLog;
-use app\job\MoneyLogInsertJob;
+use app\job\MoneyBetLogJob;
 use app\job\UserSettlementJob;
 use app\job\ZongHeMoneyJob;
 use think\facade\Db;
@@ -136,7 +136,7 @@ class CardSettlementService extends CardServiceBase
         $this->cache_user_win_amount();
 
         // 结算用户资金变动
-        Queue::push(MoneyLogInsertJob::class, $this->search_array, 'bjl_money_log_queue');
+        Queue::push(MoneyBetLogJob::class, $this->search_array, 'bjl_money_log_queue');
         // 结算完成时间记录
         $endTime = microtime(true);
         $duration = $endTime - $startTime;

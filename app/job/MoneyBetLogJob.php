@@ -7,7 +7,6 @@ use app\model\GameRecordsTemporary;
 use app\model\Luzhu;
 use app\model\UserModel;
 use app\model\MoneyLog;
-use app\job\MoneyLogInsertJob;
 use app\job\UserSettlementJob;
 use app\job\ZongHeMoneyJob;
 use think\facade\Db;
@@ -15,7 +14,7 @@ use think\facade\Queue;
 use think\queue\Job;
 
 
-class MoneyLogInsertJob
+class MoneyBetLogJob
 {
     public function fire(Job $job, $data = null)
     {
