@@ -40,7 +40,6 @@ class TableEndTaskJob
         
         $find = Table::where('id', $data['table_id'])->find();
         $find = Table::table_opening_count_down($find);
-       dump($find['id']);
         if(isset($find->end_time) && $find->end_time > 0){
             return true;
         }

@@ -45,7 +45,7 @@ class CardServiceBase
     public function get_pai_info($table_id, $game_type)
     {
         // 构建Redis键名
-        $redis_key = 'table_id_' . $table_id . '_' . $game_type;
+        $redis_key = 'pai_info_table_id_' . $table_id . '_' . $game_type;
         
         // 从Redis获取开牌数据
         $pai_data = redis()->get($redis_key);
@@ -53,23 +53,29 @@ class CardServiceBase
         // 检查数据是否存在
         if (empty($pai_data)) {
             return false;
-        }
+        }   
+
+        // 根据游戏类型调用相应的解析服务       
+        return $pai_data;
+
+    }
+
+    public function get_pai_info_temp($table_id, $game_type)
+    {
+        // 构建Redis键名
+        $redis_key = 'pai_info_temp_table_id_' . $table_id . '_' . $game_type;
         
-        // 初始化开牌服务
-        $service = new WorkerOpenPaiService();
+        // 从Redis获取开牌数据
+        $pai_data = redis()->get($redis_key);
         
-        // 根据游戏类型调用相应的处理方法
-        switch ($game_type) {
-            case 3: // 百家乐游戏
-                return $service->get_pai_info_bjl($pai_data);
-                break;
-                
-            default:
-                // 未知游戏类型
-                return [];
-        }
-        
-        return [];
+        // 检查数据是否存在
+        if (empty($pai_data)) {
+            return false;
+        }   
+
+        // 根据游戏类型调用相应的解析服务       
+        return $pai_data;
+
     }
 
     /**
@@ -110,29 +116,3 @@ class CardServiceBase
     }
 
 }
-
-/**
- * ========================================
- * 类使用说明和最佳实践
- * ========================================
- * 
- * 1. 数据流向：
- *    荷官开牌 -> 结算服务 -> Redis缓存 -> 本服务读取 -> 推送给客户端
- * 
- * 2. Redis缓存策略：
- *    - 开牌数据：存储5秒，用于实时推送
- *    - 派彩数据：存储5秒，用户领取后删除
- *    - 避免数据长期占用内存
- * 
- * 3. 错误处理：
- *    - 缓存未命中返回false，不抛出异常
- *    - 上层调用需要检查返回值
- * 
- * 4. 扩展说明：
- *    - 新增游戏类型时，在get_pai_info()中添加case分支
- *    - 每种游戏类型需要对应的解析方法
- * 
- * 5. 性能优化：
- *    - Redis读取速度快，适合高并发场景
- *    - 数据库写入异步处理，不影响用户体验
- */
