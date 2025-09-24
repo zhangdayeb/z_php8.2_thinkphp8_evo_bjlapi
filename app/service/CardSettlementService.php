@@ -8,7 +8,7 @@ use app\model\GameRecordsTemporary;
 use app\model\Luzhu;
 use app\model\UserModel;
 use app\model\MoneyLog;
-use app\job\BetMoneyLogInsert;
+use app\job\MoneyLogInsert;
 use app\job\UserSettleTaskJob;
 use app\job\ZongHeMoneyJob;
 use think\facade\Db;
@@ -498,7 +498,7 @@ class CardSettlementService extends CardServiceBase
         LogHelper::debug('开始后续处理任务');
         
         // 延迟2秒执行资金日志写入任务
-        Queue::later(2, BetMoneyLogInsert::class, $post, 'bjl_money_log_queue');
+        Queue::later(2, MoneyLogInsert::class, $post, 'bjl_money_log_queue');
         LogHelper::debug('资金日志写入任务已加入队列');
 
         // 清理临时投注记录

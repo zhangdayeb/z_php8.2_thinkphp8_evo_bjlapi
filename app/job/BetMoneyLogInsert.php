@@ -9,10 +9,10 @@ use think\queue\Job;
 
 /**
  * 开牌之后主动写入资金记录
- * Class BetMoneyLogInsert
+ * Class MoneyLogInsert
  * @package app\job
  */
-class BetMoneyLogInsert
+class MoneyLogInsert
 {
     public function fire(Job $job)
     {
