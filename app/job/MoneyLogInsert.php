@@ -1,10 +1,17 @@
 <?php
-
-
 namespace app\job;
-use app\controller\common\LogHelper;
-use app\model\MoneyLog;
 
+use app\controller\common\LogHelper;
+use app\model\GameRecords;
+use app\model\GameRecordsTemporary;
+use app\model\Luzhu;
+use app\model\UserModel;
+use app\model\MoneyLog;
+use app\job\MoneyLogInsert;
+use app\job\UserSettlementJob;
+use app\job\ZongHeMoneyJob;
+use think\facade\Db;
+use think\facade\Queue;
 use think\queue\Job;
 
 /**
@@ -14,9 +21,9 @@ use think\queue\Job;
  */
 class MoneyLogInsert
 {
-    public function fire(Job $job)
+    public function fire(Job $job, $data = null)
     {
-        $res = $this->consumption();
+        $res = $this->doJob($data);
         if ($res) {
             $job->delete();
             return;
@@ -25,11 +32,10 @@ class MoneyLogInsert
         if ($job->attempts() > 3) {
             $job->delete();
             return;
-            //通过这个方法可以检查这个任务已经重试了几次了
         }
     }
 
-    public function consumption()
+    public function doJob($data)
     {
         // 这里执行 洗码 业务 资金日志等等 标记
         return true;
