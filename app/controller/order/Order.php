@@ -33,16 +33,13 @@ class Order extends OrderBase
             'ip' => request()->ip()
         ]);
 
-        $post = $this->request->param('bet');                                                               // 获取投注记录 主要是 注码跟金额
-        
-        if (empty($post)) show([], config('ToConfig.http_code.error'), 'amount not selected');                // 空数据 处理
-        
-        $table_id = $this->request->param('table_id/d', 0);                                           // 获取台桌ID
-        if (empty($table_id)) show([], config('ToConfig.http_code.error'), 'table not selected');          // 为空，提示选择台桌
-        
-        $game_type = $this->request->param('game_type/d', 0);                                         // 获取游戏类型
-        if (empty($game_type)) show([], config('ToConfig.http_code.error'), 'game not selected');         //  为空，则提示
-        if ($game_type != 3 && $game_type !=1) show([], config('ToConfig.http_code.error'), 'game not selected');    //  为空，则提示
+        // 参数检查
+        $post = $this->request->param('bet');                                                                           // 获取投注记录 主要是 注码跟金额
+        $table_id = $this->request->param('table_id/d', 0);                                                             // 获取台桌ID
+        $game_type = $this->request->param('game_type/d', 0);                                                           // 获取游戏类型
+        if (empty($post)) show([], config('ToConfig.http_code.error'), 'amount not selected');                          // 空数据 处理
+        if (empty($table_id)) show([], config('ToConfig.http_code.error'), 'table not selected');                       // 为空，提示选择台桌
+        if (empty($game_type) || $game_type != 3) show([], config('ToConfig.http_code.error'), 'game not selected');    // 为空，则提示
         //查询台桌状态
 
         LogHelper::debug('下注参数接收', [
@@ -51,15 +48,13 @@ class Order extends OrderBase
             'game_type' => $game_type
         ]);
 
+        // 获取台桌信息
         $find = Table::page_one($table_id);
         $table_opening_count_down = redis_get_table_opening_count_down($table_id);
-        if (empty($find)) show([], config('ToConfig.http_code.error'), 'table does not exist');                // 台桌不存在
+        if (empty($find)) show([], config('ToConfig.http_code.error'), 'table does not exist');        // 台桌不存在
         if ($find['status'] != 1) show([], config('ToConfig.http_code.error'), 'table stop');          // 台桌非运营状态
         if ($find['run_status'] != 1 || $table_opening_count_down <= 0) show([], config('ToConfig.http_code.error'), 'opening card');// 台桌开牌中，禁止投注
-
-        if (cache('cache_post_order_bet_' . self::$user['id'])) {
-            show([],config('ToConfig.http_code.error'), '1秒不能重复操作');
-        }
+        if (cache('cache_post_order_bet_' . self::$user['id'])) show([],config('ToConfig.http_code.error'), '1秒不能重复操作');
         cache('cache_post_order_bet_' . self::$user['id'], time(), 1);
 
         // 根据台桌ID 获取当期的 靴号 跟 铺号
@@ -78,7 +73,6 @@ class Order extends OrderBase
         // }
         //查询是否已经购买过一次 当前局   // 101 没下单过.不是101表示下注过，返回当前下注免佣状态
         $is_order = GameRecordsTemporary::user_status_bureau_number_is_exempt($table_id, $xue_number, self::$user, true);
-        // $is_exempt = $is_order == 101 ? $is_exempt : $is_order;
         // 如果发送过来的数据 免佣状态与 当前的免佣状态不同，则提示无法投注
         if ($is_order != 101 && $is_order != $is_exempt) {
             show([],config('ToConfig.http_code.error'), lang('the Council has bet') . ':' . $is_order);

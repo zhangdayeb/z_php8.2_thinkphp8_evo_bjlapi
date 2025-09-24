@@ -15,46 +15,29 @@ use think\facade\Db;
 use think\facade\Queue;
 
 /**
- * ========================================
- * 卡牌游戏结算服务类
- * ========================================
+ * 百家乐用户结算服务类
  * 
- * 功能说明：
- * - 处理游戏开牌后的完整结算流程
- * - 管理用户投注记录和资金变动
- * - 计算游戏胜负和赔付金额
- * - 处理洗码费和代理分成（输了才给洗码费）
- * - 维护露珠历史记录
- * 
- * 结算流程：
- * 1. 保存开牌结果到露珠表
- * 2. 缓存开牌信息到Redis
- * 3. 异步队列处理用户结算
- * 4. 计算用户输赢并更新余额
- * 5. 记录资金流水日志
+ * 功能：处理百家乐游戏的用户投注结算，包括输赢计算、
+ * 资金变动、洗码费处理等完整的结算流程
  * 
  * @package app\service
- * @author  系统开发团队
  */
 class CardSettlementService extends CardServiceBase
 {
+    // search_array 用于存储查询条件 tabe_id game_type xue_number pu_number
+    public $search_array = [];
+    public $oddsModel = new GameRecords();
+
     /**
      * ========================================
-     * 游戏开牌主流程
+     * 开牌核心逻辑
      * ========================================
      * 
-     * 处理荷官开牌后的完整业务流程，包括数据保存、缓存设置、
-     * 异步结算任务分发等核心功能
+     * 处理开牌请求，保存开牌结果，缓存数据，
+     * 并分发异步结算任务
      * 
-     * 主要步骤：
-     * 1. 保存露珠数据（系统露珠 + 荷官露珠）
-     * 2. 设置Redis缓存供实时推送使用
-     * 3. 处理预设数据状态更新
-     * 4. 启动异步用户结算任务
-     * 5. 记录开牌历史信息
-     * 
-     * @param array $post 开牌数据（系统处理后）
-     * @return string JSON响应字符串
+     * @param array $post 开牌数据
+     * @return string JSON响应结果
      */
     public function open_game($post): string
     {
@@ -118,54 +101,46 @@ class CardSettlementService extends CardServiceBase
     }
 
     /**
-     * ========================================
      * 用户结算核心逻辑
-     * ========================================
      * 
-     * 处理指定局次的所有用户投注结算，包括输赢计算、
+     * 处理用户投注结算，包括输赢计算、
      * 资金变动、洗码费处理等完整的结算流程
      * 
-     * 洗码费规则（新规则）：
-     * ✅ 输钱 + 非免佣：正常给洗码费
-     * ❌ 中奖：不给洗码费
-     * ❌ 输钱 + 免佣：不给洗码费
-     * ❌ 和局：不给洗码费
-     * 
-     * 结算逻辑：
-     * 1. 查询本局所有投注记录
-     * 2. 计算每笔投注的输赢结果
-     * 3. 处理特殊赔率（幸运6、免佣庄等）
-     * 4. 根据输赢结果计算洗码费
-     * 5. 更新用户账户余额
-     * 6. 记录资金流水日志
-     * 7. 缓存派彩结果供客户端显示
-     * 
-     * @param int $luzhu_id 露珠记录ID
-     * @param array $post 开牌数据
-     * @return bool 结算是否成功
+     * @param array $post 结算数据
+     * @return bool 结算成功返回true，失败返回false
      */
-    public function user_settlement($luzhu_id, $post): bool
+    public function user_settlement($post): bool
     {
-        // 
+        // 运行时间记录
         $startTime = microtime(true);
-        
-        // ========================================
-        // 1. 查询本局投注记录
-        // ========================================
-        $oddsModel = new GameRecords();
 
         LogHelper::debug('=== 用户结算开始 ===', [
-            'luzhu_id' => $luzhu_id,
             'table_id' => $post['table_id'],
             'xue_number' => $post['xue_number'],
             'pu_number' => $post['pu_number']
         ]);
-        
-        LogHelper::debug('开始查询投注记录');
 
-        // 查询条件：最近1小时内，指定台桌、靴号、铺号的未结算投注
-        $betRecords = $oddsModel
-            ->whereTime('created_at', date("Y-m-d H:i:s", strtotime("-1 hour")))
+        // 设置查询条件
+        $this->search_array =   [
+            'table_id' => $post['table_id'],
+            'game_type' => $post['game_type'],
+            'xue_number' => $post['xue_number'],
+            'pu_number' => $post['pu_number']
+        ]
+        $luzhu_id = $post['luzhu_id'];
+
+        // 计算开牌结果
+        $this->update_mysql_records_by_pai_info($post['result_pai']);
+
+
+        // ========================================
+        // 1. 查询本局投注记录
+        // ========================================
+              
+
+        LogHelper::debug('开始查询投注记录');
+        // 获取所有未结算的投注记录
+        $betRecords = $this->oddsModel
             ->where([
                 'table_id'     => $post['table_id'],
                 'game_type'    => $post['game_type'],
@@ -175,17 +150,6 @@ class CardSettlementService extends CardServiceBase
             ])
             ->select()
             ->toArray();
-
-        LogHelper::debug('投注记录查询完成', [
-            'record_count' => count($betRecords),
-            'sql' => $oddsModel->getLastSql()
-        ]);
-
-        // 如果没有投注记录，直接返回成功
-        if (empty($betRecords)) {
-            LogHelper::debug('无投注记录，结算完成');
-            return true;
-        }
 
         LogHelper::debug('投注记录详情', $betRecords);
 
@@ -198,17 +162,7 @@ class CardSettlementService extends CardServiceBase
         // ========================================
         // 3. 计算开牌结果
         // ========================================
-        LogHelper::debug('开始计算开牌结果');
 
-        $card = new OpenPaiCalculationService();
-        $pai_result = $card->runs(json_decode($post['result_pai'], true));
-
-        LogHelper::debug('开牌计算完成', [
-            'win_array' => $pai_result['win_array'],
-            'zhuang_point' => $pai_result['zhuang_point'],
-            'xian_point' => $pai_result['xian_point']
-        ]);
-        LogHelper::debug('开牌计算详细结果', $pai_result);
 
         LogHelper::debug('开始逐笔投注结算');
 
@@ -512,6 +466,64 @@ class CardSettlementService extends CardServiceBase
         return true;
     }
 
+    // 根据开牌信息更新投注记录
+    private function update_mysql_records_by_pai_info($result_pai)
+    {
+        LogHelper::debug('开始计算开牌结果');
+        $card = new OpenPaiCalculationService();
+        $pai_result = $card->runs(json_decode($result_pai, true));
+        LogHelper::debug('开牌计算详细结果', $pai_result);
+        
+        // 根据点数计算 输赢结果
+        if ($res['zhuang_point'] == $res['xian_point']) {
+            $res['result'] = 'he'; // 和局
+        } elseif ($res['zhuang_point'] > $res['xian_point']) {
+            $res['result'] = 'zhuang'; // 庄赢
+        } else {
+            $res['result'] = 'xian'; // 闲赢
+        }
+
+        // 计算其他投注结果
+        $search_array = $this->search_array;
+        $search_array['game_peilv_id'] = 2; // 闲对
+        if($res['xian_dui'] == 1){
+
+        }
+        $search_array['game_peilv_id'] = 3; // 幸运6
+        if($res['lucky'] == 6){
+            if($res['luckySize'] == 2){
+                $peilv = 12; // 幸运6 二张牌
+            }
+            if($res['luckySize'] == 3){
+                $peilv = 20; // 幸运6 三张牌
+            }
+        }
+        $search_array['game_peilv_id'] = 4; // 庄对
+        if($res['zhuang_dui'] == 1){
+
+        }
+        $search_array['game_peilv_id'] = 6; // 闲
+        if($res['result'] == 'xian'){
+
+        }
+        $search_array['game_peilv_id'] = 7; // 和
+        if($res['result'] == 'he'){
+            // 退回本金 给庄闲
+
+        }
+        $search_array['game_peilv_id'] = 8; // 庄
+        if($res['result'] == 'xian'){
+
+        }
+        $search_array['game_peilv_id'] = 9; // 龙7
+        if($res['zhuang_point'] == 7 && $res['zhuang_count'] == 3){
+
+        }
+        $search_array['game_peilv_id'] = 10; // 熊8
+        if($res['xian_point'] == 8 && $res['xian_count'] == 3){
+
+        }
+    }   
     /**
      * ========================================
      * 根据输赢结果计算洗码费（新规则）

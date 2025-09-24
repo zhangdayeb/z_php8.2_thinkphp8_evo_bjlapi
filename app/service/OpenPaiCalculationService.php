@@ -52,6 +52,7 @@ class OpenPaiCalculationService
         $result = $this->calculation_result($calculation_start);        
         LogHelper::debug('最终计算结果', $result);
         LogHelper::debug('=== 开牌计算完成 ===');
+        return $result;
     }
 
     /**
@@ -131,11 +132,7 @@ class OpenPaiCalculationService
         $res['zhuang_point'] = $res['zhuang_point'] % 10;
         $res['xian_point'] = $res['xian_point'] % 10;
         $res['lucky'] = $res['lucky'] % 10;
-
-        // 计算和局 退回本金
-
-        // 计算幸运六赔率 
-        
+        // 返回最终结算的结果        
         return $res;
     }
     

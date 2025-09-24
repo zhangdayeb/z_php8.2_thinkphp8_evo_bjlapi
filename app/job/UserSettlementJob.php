@@ -47,28 +47,9 @@ class UserSettlementJob
     }
     private function doHelloJob($data) {
         
-        LogHelper::debug('开始执行具体结算逻辑');
-
-        // 根据消息中的数据进行实际的业务处理...
-        if (empty($data)){
-            LogHelper::warning('结算数据为空');
-            return true;
-        }
-
-        $luzhu_id = $data['luzhu_id'];
-        unset($data['luzhu_id']);
-
-        LogHelper::debug('调用结算服务', ['luzhu_id' => $luzhu_id]);
-
+        LogHelper::debug('开始执行具体结算逻辑 调用结算服务', ['luzhu_id' => $data['luzhu_id']]);
         $card_service = new CardSettlementService();
-        $res = $card_service->user_settlement($luzhu_id,$data);
-
-        if (!$res){
-            LogHelper::error('结算服务执行失败', ['luzhu_id' => $luzhu_id]);
-            return false;
-        }
-
-        LogHelper::debug('结算服务执行成功', ['luzhu_id' => $luzhu_id]);
+        $res = $card_service->user_settlement($data);
         return true;
     }
 }
