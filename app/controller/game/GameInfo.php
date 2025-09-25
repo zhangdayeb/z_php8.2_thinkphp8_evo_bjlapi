@@ -190,5 +190,33 @@ class GameInfo extends Base
                 return 'pending';
         }
     }
+    // 当前下单记录
+    public function order_current_record()
+    {
+        $table_id = $this->request->post('id/d', 0);
+        if ($table_id <= 0) show([]);
 
+        $records = GameRecords::where([
+                'user_id'      => self::$user['id'],
+                'table_id'     => $table_id,
+                'close_status' => 1,
+            ])
+            ->field('bet_amt,game_peilv_id,is_exempt')
+            ->whereTime('created_at', '-10 minutes')
+            ->select();
+
+        $is_exempt = 0;
+
+        foreach ($records as $record) {
+            if ($record['is_exempt'] != 0) {
+                $is_exempt = $record['is_exempt'];
+                break;
+            }
+        }
+
+        show([
+            'is_exempt'   => $is_exempt,
+            'record_list' => $records,
+        ]);
+    }
 }

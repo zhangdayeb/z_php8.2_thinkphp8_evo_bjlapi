@@ -38,7 +38,7 @@ Route::rule('bjl/get_table/clear_lu_zhu_one_table$', '/game.GetForeignTableInfo/
 // 用户下注接口
 Route::rule('bjl/bet/order$', '/order.Order/user_bet_order');
 // 获取用户当前投注记录
-Route::rule('bjl/current/record$', '/order.Order/order_current_record');
+Route::rule('bjl/current/record$', '/game.GameInfo/order_current_record');
 // 首页路由
 Route::rule('/$', '/index/index');
 
