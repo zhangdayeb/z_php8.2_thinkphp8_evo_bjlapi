@@ -99,28 +99,6 @@ class GameInfo extends Base
         show($result);
     }
 
-    /**
-     * 获取单条投注记录详情
-     */
-    public function get_bet_detail()
-    {
-        $record_id = $this->request->param('record_id', '');
-        $user_id = $this->request->param('user_id/d', 0);
-
-        if (empty($record_id)) show([], config('ToConfig.http_code.error'), '记录ID必填');
-        if ($user_id <= 0) show([], config('ToConfig.http_code.error'), '用户ID必填');
-
-        // 查询记录详情
-        $record = Db::name('dianji_records')
-            ->where('id', $record_id)
-            ->where('user_id', $user_id)
-            ->find();
-
-        if (empty($record)) show([], config('ToConfig.http_code.error'), '投注记录不存在');
-
-        $result = $this->formatBettingRecord($record);
-        show($result);
-    }
 
     /**
      * 格式化投注记录数据
@@ -190,33 +168,5 @@ class GameInfo extends Base
                 return 'pending';
         }
     }
-    // 当前下单记录
-    public function order_current_record()
-    {
-        $table_id = $this->request->post('id/d', 0);
-        if ($table_id <= 0) show([]);
 
-        $records = GameRecords::where([
-                'user_id'      => self::$user['id'],
-                'table_id'     => $table_id,
-                'close_status' => 1,
-            ])
-            ->field('bet_amt,game_peilv_id,is_exempt')
-            ->whereTime('created_at', '-10 minutes')
-            ->select();
-
-        $is_exempt = 0;
-
-        foreach ($records as $record) {
-            if ($record['is_exempt'] != 0) {
-                $is_exempt = $record['is_exempt'];
-                break;
-            }
-        }
-
-        show([
-            'is_exempt'   => $is_exempt,
-            'record_list' => $records,
-        ]);
-    }
 }
