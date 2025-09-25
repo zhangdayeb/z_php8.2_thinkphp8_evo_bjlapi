@@ -1,193 +1,361 @@
-    
-    namespace app\controller\game;
+<?php
+namespace app\controller\game;
 
+use app\controller\Base;
 use app\controller\common\LogHelper;
-use app\BaseController;
 use app\model\Luzhu;
 use app\model\Table;
-use app\job\TableStartJob;
-use app\service\CardSettlementService;
-use app\validate\BetOrder as validates;
-use think\exception\ValidateException;
-use think\facade\Queue;
-use app\model\UserModel;           // 用户模型
-use app\model\GameRecords;         // 游戏记录模型  
-use think\facade\Db;               // 数据库操作
-use app\business\Curl;
-use app\business\RequestUrl;
-use app\model\HomeTokenModel;
-extends Base
-    
-    // 获取台桌列表
+use think\facade\Db;
+
+/**
+ * 台桌信息控制器
+ * 处理百家乐游戏台桌相关的所有查询和操作
+ */
+class TableInfo extends Base
+{
+    /**
+     * 获取台桌列表
+     * @return string JSON响应
+     */
     public function get_table_list(): string
     {
-        $gameTypeView = array(
-            '1' => '_nn',
-            '2' => '_lh',
-            '3' => '_bjl'
-        );
-        $infos = Table::where(['status' => 1])->order('id asc')->select()->toArray();
-        empty($infos) && show($infos, 1);
-        foreach ($infos as $k => $v) {
-            // 设置台桌类型 对应的 view 文件
-            $infos[$k]['viewType'] = $gameTypeView[$v['game_type']];
-            $number = rand(100, 3000);// 随机人数
-            $infos[$k]['number'] = $number;
-            // 获取靴号
-            //正式需要加上时间查询
-            $luZhu = Luzhu::where(['status' => 1, 'table_id' => $v['id']])->whereTime('create_time', 'today')->select()->toArray();
-
-            if (isset($luZhu['xue_number'])) {
-                $infos[$k]['xue_number'] = $luZhu['xue_number'];
-                continue;
+        try {
+            // 游戏类型视图映射
+            $gameTypeView = [
+                '1' => '_nn',   // 牛牛
+                '2' => '_lh',   // 龙虎
+                '3' => '_bjl'   // 百家乐
+            ];
+            
+            // 查询所有启用的台桌
+            $tables = Table::where(['status' => 1])
+                ->order('id asc')
+                ->select()
+                ->toArray();
+            
+            if (empty($tables)) {
+                return show([], 1, '暂无可用台桌');
             }
-            $infos[$k]['xue_number'] = 1;
+            
+            // 处理每个台桌的附加信息
+            foreach ($tables as $k => $v) {
+                // 设置视图类型
+                $tables[$k]['viewType'] = $gameTypeView[$v['game_type']] ?? '_bjl';
+                
+                // 生成随机在线人数（演示用）
+                $tables[$k]['number'] = rand(100, 3000);
+                
+                // 获取当前靴号
+                $luZhu = Luzhu::where([
+                    'status' => 1, 
+                    'table_id' => $v['id']
+                ])
+                ->whereTime('create_time', 'today')
+                ->order('id desc')
+                ->find();
+                
+                $tables[$k]['xue_number'] = $luZhu ? $luZhu['xue_number'] : 1;
+            }
+            
+            return show($tables, 1, '获取台桌列表成功');
+            
+        } catch (\Exception $e) {
+            LogHelper::error('获取台桌列表失败', [
+                'error' => $e->getMessage()
+            ]);
+            return show([], config('ToConfig.http_code.error'), '获取台桌列表失败');
         }
-        show($infos, 1);
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        // 获取统计数据
+    
+    /**
+     * 获取台桌详细信息（合并后的方法）
+     * 包含：基础信息、靴号铺号、视频地址、洗牌状态等
+     * @return string JSON响应
+     */
+    public function get_table_info(): string
+    {
+        $tableId = $this->request->param('tableId', 0);
+        $infoType = $this->request->param('infoType', 'all'); // all, basic, video, bet
+        
+        // 参数验证
+        if (empty($tableId) || !is_numeric($tableId)) {
+            return show([], config('ToConfig.http_code.error'), '台桌ID必填且必须为数字');
+        }
+        
+        try {
+            // 查询台桌信息
+            $tableInfo = Table::find($tableId);
+            if (empty($tableInfo)) {
+                return show([], config('ToConfig.http_code.error'), '台桌不存在');
+            }
+            
+            $tableData = $tableInfo->toArray();
+            
+            // 获取靴号和铺号
+            $bureauInfo = xue_number($tableId);
+            
+            // 构建返回数据
+            $returnData = [
+                'id' => $tableData['id'],
+                'table_name' => $tableData['lu_zhu_name'],
+                'game_type' => $tableData['game_type'],
+                'status' => $tableData['status'],
+                'run_status' => $tableData['run_status'],
+                'wash_status' => $tableData['wash_status'],
+                
+                // 靴号铺号信息
+                'xue_number' => $bureauInfo['xue_number'],
+                'pu_number' => $bureauInfo['pu_number'],
+                'bureau_number' => $bureauInfo['bureau_number'] ?? '',
+                
+                // 倒计时信息
+                'countdown_time' => $tableData['countdown_time'],
+                'opening_countdown' => redis_get_table_opening_count_down($tableId),
+                
+                // 视频流地址
+                'video_near' => $tableData['video_near'],
+                'video_far' => $tableData['video_far'],
+                
+                // 限红信息（人民币）
+                'limit_cny' => [
+                    'banker_player' => [
+                        'min' => $tableData['bjl_xian_hong_zhuang_xian_min'] ?? 0,
+                        'max' => $tableData['bjl_xian_hong_zhuang_xian_max'] ?? 0
+                    ],
+                    'tie' => [
+                        'min' => $tableData['bjl_xian_hong_he_min'] ?? 0,
+                        'max' => $tableData['bjl_xian_hong_he_max'] ?? 0
+                    ],
+                    'pair' => [
+                        'min' => $tableData['bjl_xian_hong_duizi_min'] ?? 0,
+                        'max' => $tableData['bjl_xian_hong_duizi_max'] ?? 0
+                    ],
+                    'lucky6' => [
+                        'min' => $tableData['bjl_xian_hong_lucky6_min'] ?? 0,
+                        'max' => $tableData['bjl_xian_hong_lucky6_max'] ?? 0
+                    ]
+                ]
+            ];
+            
+            // 根据请求类型返回不同的数据
+            switch ($infoType) {
+                case 'basic':
+                    // 只返回基础信息
+                    unset($returnData['video_near'], $returnData['video_far']);
+                    break;
+                case 'video':
+                    // 只返回视频信息
+                    $returnData = [
+                        'id' => $tableData['id'],
+                        'video_near' => $tableData['video_near'],
+                        'video_far' => $tableData['video_far']
+                    ];
+                    break;
+                case 'bet':
+                    // 下注专用信息
+                    unset($returnData['video_near'], $returnData['video_far']);
+                    $returnData['is_table_xian_hong'] = $tableData['is_table_xian_hong'] ?? 0;
+                    break;
+            }
+            
+            LogHelper::debug('获取台桌信息成功', [
+                'table_id' => $tableId,
+                'info_type' => $infoType
+            ]);
+            
+            return show($returnData, 1, '获取台桌信息成功');
+            
+        } catch (\Exception $e) {
+            LogHelper::error('获取台桌信息失败', [
+                'table_id' => $tableId,
+                'error' => $e->getMessage()
+            ]);
+            return show([], config('ToConfig.http_code.error'), '获取台桌信息失败');
+        }
+    }
+    
+    /**
+     * 获取台桌统计数据
+     * 统计当天的庄闲和等开奖结果
+     * @return string JSON响应
+     */
     public function get_table_count(): string
     {
-        $params = $this->request->param();
-        $map = array();
-        $map['status'] = 1;
-        if (!isset($params['tableId']) || !isset($params['xue']) || !isset($params['gameType'])) {
-            show([], 0,'');
+        // 获取参数
+        $tableId = $this->request->param('tableId', 0);
+        $xueNumber = $this->request->param('xue', 0);
+        $gameType = $this->request->param('gameType', 3);
+        
+        // 参数验证
+        if (empty($tableId) || empty($xueNumber)) {
+            return show([], config('ToConfig.http_code.error'), '参数不完整');
         }
-
-        $map['table_id'] = $params['tableId'];
-        $map['xue_number'] = $params['xue'];
-        $map['game_type'] = $params['gameType']; // 代表百家乐
-
-        $nowTime = time();
-		$startTime = strtotime(date("Y-m-d 09:00:00", time()));
-		// 如果小于，则算前一天的
-		if ($nowTime < $startTime) {
-		    $startTime = $startTime - (24 * 60 * 60);
-		} else {
-		    // 保持不变 这样做到 自动更新 露珠
-		}
-
-        // 需要兼容 龙7 熊8 大小老虎 69 幸运6 
-        $returnData = array();
-        $returnData_zhuang_1 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '1|%')->where($map)->order('id asc')->count();
-        $returnData_zhuang_4 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '4|%')->where($map)->order('id asc')->count();
-        $returnData_zhuang_6 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '6|%')->where($map)->order('id asc')->count();
-        $returnData_zhuang_7 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '7|%')->where($map)->order('id asc')->count();
-        $returnData_zhuang_9 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '9|%')->where($map)->order('id asc')->count();
-		$returnData['zhuang'] = $returnData_zhuang_1 + $returnData_zhuang_4 + $returnData_zhuang_6 + $returnData_zhuang_7 + $returnData_zhuang_9;
-
-        $returnData_xian_2 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '2|%')->where($map)->order('id asc')->count();
-        $returnData_xian_8 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '8|%')->where($map)->order('id asc')->count();
-        $returnData['xian'] = $returnData_xian_2 + $returnData_xian_8;
-
-        $returnData['he'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '3|%')->where($map)->order('id asc')->count();
-        $returnData['zhuangDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|1')->where($map)->order('id asc')->count();
-        $returnData['xianDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|2')->where($map)->order('id asc')->count();
-        $returnData['zhuangXianDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|3')->where($map)->order('id asc')->count();
-        $returnData['zhuangDui'] += $returnData['zhuangXianDui'];
-        $returnData['xianDui'] += $returnData['zhuangXianDui'];
-        // 返回数据
-        show($returnData, 1);
-    }
-
-
-
-    
-    //台桌信息 靴号 铺号
-    public function get_table_info()
-    {
-        $params = $this->request->param();
-        $returnData = array();
-        $info = Table::order('id desc')->find($params['tableId']);
-        // 发给前台的 数据
-        $returnData['lu_zhu_name'] = $info['lu_zhu_name'];
-        $returnData['right_money_banker_player'] = $info['xian_hong_zhuang_xian_usd'];
-        $returnData['right_money_banker_player_cny'] = $info['xian_hong_zhuang_xian_cny'];
-        $returnData['right_money_tie'] = $info['xian_hong_he_usd'];
-        $returnData['right_money_tie_cny'] = $info['xian_hong_he_cny'];
-        $returnData['right_money_pair'] = $info['xian_hong_duizi_usd'];
-        $returnData['right_money_pair_cny'] = $info['xian_hong_duizi_cny'];
-        $returnData['video_near'] = $info['video_near'];
-        $returnData['video_far'] = $info['video_far'];
-        $returnData['time_start'] = $info['countdown_time'];
-
-        // 获取最新的 靴号，铺号
-        $xun = bureau_number($params['tableId'],true);
-        $returnData['id'] = $info['id'];
-        $returnData['num_pu'] = $xun['xue']['pu_number'];
-        $returnData['num_xue'] = $xun['xue']['xue_number'];
-         $returnData['bureau_number'] = $xun['bureau_number'];
-        // 返回数据
-        show($returnData, 1);
-    }
-
-    //台桌信息 靴号 铺号
-    public function get_table_info_for_bet()
-    {
-        $params = $this->request->param();
-        $returnData = array();
-        $info = Table::order('id desc')->find($params['tableId']);
-        // 获取最新的 靴号，铺号
-        $xun = bureau_number($params['tableId'],true);
-        $info['num_pu'] = $xun['xue']['pu_number'];
-        $info['num_xue'] = $xun['xue']['xue_number'];
-        // 返回数据
-        show($info, 1);
+        
+        try {
+            // 构建查询条件
+            $map = [
+                'status' => 1,
+                'table_id' => $tableId,
+                'xue_number' => $xueNumber,
+                'game_type' => $gameType
+            ];
+            
+            // 计算统计时间范围（从早上9点开始）
+            $nowTime = time();
+            $startTime = strtotime(date("Y-m-d 09:00:00"));
+            if ($nowTime < $startTime) {
+                $startTime = $startTime - 86400; // 前一天的9点
+            }
+            
+            // 查询各种结果的数量
+            $baseQuery = Luzhu::whereTime('create_time', '>=', date('Y-m-d H:i:s', $startTime))
+                ->where($map);
+            
+            // 统计庄赢（包含所有庄赢的结果码）
+            $zhuangCount = 0;
+            $zhuangResults = ['1|%', '4|%', '6|%', '7|%', '9|%'];
+            foreach ($zhuangResults as $pattern) {
+                $count = (clone $baseQuery)->where('result', 'like', $pattern)->count();
+                $zhuangCount += $count;
+            }
+            
+            // 统计闲赢
+            $xianCount = 0;
+            $xianResults = ['2|%', '8|%'];
+            foreach ($xianResults as $pattern) {
+                $count = (clone $baseQuery)->where('result', 'like', $pattern)->count();
+                $xianCount += $count;
+            }
+            
+            // 统计和
+            $heCount = (clone $baseQuery)->where('result', 'like', '3|%')->count();
+            
+            // 统计对子
+            $zhuangDuiCount = (clone $baseQuery)->where('result', 'like', '%|1')->count();
+            $xianDuiCount = (clone $baseQuery)->where('result', 'like', '%|2')->count();
+            $shuangDuiCount = (clone $baseQuery)->where('result', 'like', '%|3')->count();
+            
+            // 处理双对的情况
+            $zhuangDuiCount += $shuangDuiCount;
+            $xianDuiCount += $shuangDuiCount;
+            
+            // 构建返回数据
+            $returnData = [
+                'zhuang' => $zhuangCount,
+                'xian' => $xianCount,
+                'he' => $heCount,
+                'zhuangDui' => $zhuangDuiCount,
+                'xianDui' => $xianDuiCount,
+                'zhuangXianDui' => $shuangDuiCount,
+                'total' => $zhuangCount + $xianCount + $heCount
+            ];
+            
+            LogHelper::debug('获取台桌统计成功', [
+                'table_id' => $tableId,
+                'xue_number' => $xueNumber,
+                'stats' => $returnData
+            ]);
+            
+            return show($returnData, 1, '获取统计数据成功');
+            
+        } catch (\Exception $e) {
+            LogHelper::error('获取台桌统计失败', [
+                'table_id' => $tableId,
+                'error' => $e->getMessage()
+            ]);
+            return show([], config('ToConfig.http_code.error'), '获取统计数据失败');
+        }
     }
     
-    //台桌信息
-    public function get_table_wash_brand()
-    {
-        $tableId = $this->request->param('tableId',0);
-        if ($tableId <=0 ) show([], config('ToConfig.http_code.error'),'台桌ID必填');
-        $table  = Table::where('id',$tableId)->find();
-        $status = $table->wash_status == 0 ? 1 : 0;
-        $table->save(['wash_status'=>$status]);
-        $returnData['result_info']  = ['table_info'=>['game_type'=>123456]];
-        $returnData['money_spend']  = '';
-        // 返回数据
-        show([], 1);
-    }
-
-    
-    //获取台桌视频    
-    public function get_table_video()
-    {
-        $params = $this->request->param();
-        $returnData = array();
-        $info = Table::order('id desc')->find($params['tableId']);
-        $returnData['video_near'] = $info['video_near'];
-        $returnData['video_far'] = $info['video_far'];
-        // 返回数据
-        show($returnData, 1);
-    }
-
-   //获取台桌露珠信息
+    /**
+     * 获取露珠列表
+     * @return string JSON响应
+     */
     public function get_lz_list(): string
     {
-        $params = $this->request->param();
-        if(!isset($params['tableId']) || empty($params['tableId'])) return show([],1,'台桌ID不存在');
-         $table  = Table::where('id',$params['tableId'])->find();
-         if(empty($table)) return show([],1,'台桌不存在');
-         $table = $table->toArray();
-         if($table['wash_status']  ==1 ){
-               show([], 1);
-         }
-        $returnData = Luzhu::LuZhuList($params);
-        show($returnData, 1);
+        $tableId = $this->request->param('tableId', 0);
+        
+        // 参数验证
+        if (empty($tableId)) {
+            return show([], config('ToConfig.http_code.error'), '台桌ID不存在');
+        }
+        
+        try {
+            // 验证台桌是否存在
+            $table = Table::find($tableId);
+            if (empty($table)) {
+                return show([], config('ToConfig.http_code.error'), '台桌不存在');
+            }
+            
+            // 检查洗牌状态
+            if ($table['wash_status'] == 1) {
+                return show([], 1, '正在洗牌中');
+            }
+            
+            // 获取露珠数据
+            $params = $this->request->param();
+            $returnData = Luzhu::LuZhuList($params);
+            
+            LogHelper::debug('获取露珠列表成功', [
+                'table_id' => $tableId,
+                'count' => count($returnData)
+            ]);
+            
+            return show($returnData, 1, '获取露珠列表成功');
+            
+        } catch (\Exception $e) {
+            LogHelper::error('获取露珠列表失败', [
+                'table_id' => $tableId,
+                'error' => $e->getMessage()
+            ]);
+            return show([], config('ToConfig.http_code.error'), '获取露珠列表失败');
+        }
     }
+    
+    /**
+     * 切换台桌洗牌状态
+     * @return string JSON响应
+     */
+    public function get_table_wash_brand(): string
+    {
+        $tableId = $this->request->param('tableId', 0);
+        
+        // 参数验证
+        if (empty($tableId)) {
+            return show([], config('ToConfig.http_code.error'), '台桌ID必填');
+        }
+        
+        try {
+            // 查询台桌
+            $table = Table::find($tableId);
+            if (empty($table)) {
+                return show([], config('ToConfig.http_code.error'), '台桌不存在');
+            }
+            
+            // 切换洗牌状态
+            $newStatus = $table->wash_status == 0 ? 1 : 0;
+            $table->save(['wash_status' => $newStatus]);
+            
+            LogHelper::info('切换洗牌状态', [
+                'table_id' => $tableId,
+                'old_status' => $table->wash_status == $newStatus ? 0 : 1,
+                'new_status' => $newStatus
+            ]);
+            
+            $returnData = [
+                'table_id' => $tableId,
+                'wash_status' => $newStatus,
+                'message' => $newStatus == 1 ? '开始洗牌' : '洗牌结束'
+            ];
+            
+            return show($returnData, 1, '操作成功');
+            
+        } catch (\Exception $e) {
+            LogHelper::error('切换洗牌状态失败', [
+                'table_id' => $tableId,
+                'error' => $e->getMessage()
+            ]);
+            return show([], config('ToConfig.http_code.error'), '操作失败');
+        }
+    }
+}
