@@ -130,13 +130,14 @@ class CardSettlementService extends CardServiceBase
         $luzhu_id = $post['luzhu_id'];
 
         // 计算开牌结果 + 标记用户输赢
-        $this->update_mysql_records_by_pai_info($post['result_pai']);
+        $res = $this->update_mysql_records_by_pai_info($post['result_pai']);
 
         // 获取用户中奖金额 存入 redis 供前端查询
         $this->cache_user_win_amount();
 
         // 结算用户资金变动
-        Queue::push(MoneyBetLogJob::class, $this->search_array, 'bjl_money_log_queue');
+        $jobData = ['search'=>$this->search_array,'pai_info'=>$res,'result_pai'=>$post['result_pai']];
+        Queue::push(MoneyBetLogJob::class, $jobData, 'bjl_money_log_queue');
         // 结算完成时间记录
         $endTime = microtime(true);
         $duration = $endTime - $startTime;
@@ -297,5 +298,7 @@ class CardSettlementService extends CardServiceBase
             // 标记为输了 默认就是输了 
             $this->GameRecords->where($search_array)->update(['win_amt' => 0, 'win_or_loss' => 0]);
         }
+
+        return $res;
     }   
 }    
