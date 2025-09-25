@@ -1,7 +1,7 @@
 <?php
 namespace app\controller\game;
 
-use app\controller\Base;
+use app\BaseController;
 use app\controller\common\LogHelper;
 use app\model\Luzhu;
 use app\model\Table;
@@ -11,7 +11,7 @@ use think\facade\Db;
  * 台桌信息控制器
  * 处理百家乐游戏台桌相关的所有查询和操作
  */
-class TableInfo extends Base
+class TableInfo extends BaseController
 {
     /**
      * 获取台桌列表
@@ -72,107 +72,42 @@ class TableInfo extends Base
      * 包含：基础信息、靴号铺号、视频地址、洗牌状态等
      * @return string JSON响应
      */
-    public function get_table_info(): string
-    {
-        $tableId = $this->request->param('tableId', 0);
-        $infoType = $this->request->param('infoType', 'all'); // all, basic, video, bet
-        
-        // 参数验证
-        if (empty($tableId) || !is_numeric($tableId)) {
-            return show([], config('ToConfig.http_code.error'), '台桌ID必填且必须为数字');
-        }
-        
-        try {
-            // 查询台桌信息
-            $tableInfo = Table::find($tableId);
-            if (empty($tableInfo)) {
-                return show([], config('ToConfig.http_code.error'), '台桌不存在');
-            }
-            
-            $tableData = $tableInfo->toArray();
-            
-            // 获取靴号和铺号
-            $bureauInfo = xue_number($tableId);
-            
-            // 构建返回数据
-            $returnData = [
-                'id' => $tableData['id'],
-                'table_name' => $tableData['lu_zhu_name'],
-                'game_type' => $tableData['game_type'],
-                'status' => $tableData['status'],
-                'run_status' => $tableData['run_status'],
-                'wash_status' => $tableData['wash_status'],
-                
-                // 靴号铺号信息
-                'xue_number' => $bureauInfo['xue_number'],
-                'pu_number' => $bureauInfo['pu_number'],
-                'bureau_number' => $bureauInfo['bureau_number'] ?? '',
-                
-                // 倒计时信息
-                'countdown_time' => $tableData['countdown_time'],
-                'opening_countdown' => redis_get_table_opening_count_down($tableId),
-                
-                // 视频流地址
-                'video_near' => $tableData['video_near'],
-                'video_far' => $tableData['video_far'],
-                
-                // 限红信息（人民币）
-                'limit_cny' => [
-                    'banker_player' => [
-                        'min' => $tableData['bjl_xian_hong_zhuang_xian_min'] ?? 0,
-                        'max' => $tableData['bjl_xian_hong_zhuang_xian_max'] ?? 0
-                    ],
-                    'tie' => [
-                        'min' => $tableData['bjl_xian_hong_he_min'] ?? 0,
-                        'max' => $tableData['bjl_xian_hong_he_max'] ?? 0
-                    ],
-                    'pair' => [
-                        'min' => $tableData['bjl_xian_hong_duizi_min'] ?? 0,
-                        'max' => $tableData['bjl_xian_hong_duizi_max'] ?? 0
-                    ],
-                    'lucky6' => [
-                        'min' => $tableData['bjl_xian_hong_lucky6_min'] ?? 0,
-                        'max' => $tableData['bjl_xian_hong_lucky6_max'] ?? 0
-                    ]
-                ]
-            ];
-            
-            // 根据请求类型返回不同的数据
-            switch ($infoType) {
-                case 'basic':
-                    // 只返回基础信息
-                    unset($returnData['video_near'], $returnData['video_far']);
-                    break;
-                case 'video':
-                    // 只返回视频信息
-                    $returnData = [
-                        'id' => $tableData['id'],
-                        'video_near' => $tableData['video_near'],
-                        'video_far' => $tableData['video_far']
-                    ];
-                    break;
-                case 'bet':
-                    // 下注专用信息
-                    unset($returnData['video_near'], $returnData['video_far']);
-                    $returnData['is_table_xian_hong'] = $tableData['is_table_xian_hong'] ?? 0;
-                    break;
-            }
-            
-            LogHelper::debug('获取台桌信息成功', [
-                'table_id' => $tableId,
-                'info_type' => $infoType
-            ]);
-            
-            return show($returnData, 1, '获取台桌信息成功');
-            
-        } catch (\Exception $e) {
-            LogHelper::error('获取台桌信息失败', [
-                'table_id' => $tableId,
-                'error' => $e->getMessage()
-            ]);
-            return show([], config('ToConfig.http_code.error'), '获取台桌信息失败');
-        }
+public function get_table_info(): string
+{
+    $tableId = $this->request->param('tableId', 0);
+    
+    // 参数验证
+    if (empty($tableId) || !is_numeric($tableId)) {
+        return show([], config('ToConfig.http_code.error'), '台桌ID必填且必须为数字');
     }
+    
+    try {
+        // 查询台桌信息
+        $tableInfo = Table::find($tableId);
+        if (empty($tableInfo)) {
+            return show([], config('ToConfig.http_code.error'), '台桌不存在');
+        }
+        
+        // 获取原始数据
+        $tableData = $tableInfo->toArray();
+        
+        // 获取靴号和铺号
+        $bureauInfo = xue_number($tableId);
+        
+        // 添加靴号铺号到原始数据
+        $tableData['xue_number'] = $bureauInfo['xue_number'];
+        $tableData['pu_number'] = $bureauInfo['pu_number'];
+        
+        return show($tableData, 1, '获取台桌信息成功');
+        
+    } catch (\Exception $e) {
+        LogHelper::error('获取台桌信息失败', [
+            'table_id' => $tableId,
+            'error' => $e->getMessage()
+        ]);
+        return show([], config('ToConfig.http_code.error'), '获取台桌信息失败');
+    }
+}
     
     /**
      * 获取台桌统计数据

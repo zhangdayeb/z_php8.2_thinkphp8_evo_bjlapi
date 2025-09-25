@@ -1,7 +1,7 @@
 <?php
 namespace app\controller\game;
 
-use app\controller\Base;
+use app\BaseController;
 use app\controller\common\LogHelper;
 use app\model\Luzhu;
 use app\model\Table;
@@ -16,7 +16,7 @@ use think\facade\Db;
  * 投注和开牌控制器
  * 处理荷官开牌、设置靴号、开始结束信号等操作
  */
-class Bet extends Base
+class Bet extends BaseController
 {
     /**
      * 荷官开牌
@@ -97,7 +97,7 @@ class Bet extends Base
                 'error' => $e->getMessage(),
                 'params' => $openData
             ]);
-            return show([], config('ToConfig.http_code.error'), '开牌失败：' . $e->getMessage());
+            return show([], config('ToConfig.http_code.error'), 'Bet开牌失败：' . $e->getMessage());
         }
     }
     
