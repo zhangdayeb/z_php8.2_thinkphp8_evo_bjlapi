@@ -44,14 +44,14 @@ class Bet extends BaseController
         if (empty($params['tableId']) || empty($params['gameType']) || 
             empty($params['xueNumber']) || empty($params['puNumber'])) {
             LogHelper::error('开牌参数缺失', $params);
-            return show([], config('ToConfig.http_code.error'), '必要参数缺失');
+            show([], config('ToConfig.http_code.error'), '必要参数缺失');
         }
         
         // 检查是否重复开牌
         $isDuplicate = $this->checkDuplicateResult($params);
         if ($isDuplicate) {
             LogHelper::warning('重复开牌请求', $params);
-            return show([], config('ToConfig.http_code.error'), '该局已经开牌，请勿重复提交');
+            show([], config('ToConfig.http_code.error'), '该局已经开牌，请勿重复提交');
         }
         
         // 构建开牌数据
@@ -89,7 +89,7 @@ class Bet extends BaseController
                     LogHelper::error('不支持的游戏类型', [
                         'game_type' => $params['gameType']
                     ]);
-                    return show([], config('ToConfig.http_code.error'), '不支持的游戏类型');
+                    show([], config('ToConfig.http_code.error'), '不支持的游戏类型');
             }
             
         } catch (\Exception $e) {
@@ -98,7 +98,7 @@ class Bet extends BaseController
                 'trace' => $e->getTraceAsString(),
                 'params' => $openData
             ]);
-            return show([], config('ToConfig.http_code.error'), '开牌失败：' . $e->getMessage());
+            show([], config('ToConfig.http_code.error'), '开牌失败：' . $e->getMessage());
         }
     }
     
@@ -120,7 +120,7 @@ class Bet extends BaseController
                 'error' => $e->getError(),
                 'params' => $params
             ]);
-            return show([], config('ToConfig.http_code.error'), $e->getError());
+            show([], config('ToConfig.http_code.error'), $e->getError());
         }
         
         try {
@@ -154,7 +154,7 @@ class Bet extends BaseController
                     'xue_number' => $xueNumber
                 ]);
                 
-                return show($newXue, 1, '设置靴号成功');
+                show($newXue, 1, '设置靴号成功');
             } else {
                 throw new \Exception('保存靴号失败');
             }
@@ -164,7 +164,7 @@ class Bet extends BaseController
                 'error' => $e->getMessage(),
                 'params' => $params
             ]);
-            return show([], config('ToConfig.http_code.error'), '设置靴号失败');
+            show([], config('ToConfig.http_code.error'), '设置靴号失败');
         }
     }
     
@@ -183,7 +183,7 @@ class Bet extends BaseController
             LogHelper::warning('开局信号参数错误', [
                 'table_id' => $tableId
             ]);
-            return show([], config('ToConfig.http_code.error'), 'tableId参数错误');
+            show([], config('ToConfig.http_code.error'), 'tableId参数错误');
         }
         
         // 限制倒计时时间范围
@@ -219,14 +219,14 @@ class Bet extends BaseController
                 'countdown' => $time
             ]);
             
-            return show($queueData, 1, '开局成功');
+            show($queueData, 1, '开局成功');
             
         } catch (\Exception $e) {
             LogHelper::error('发送开局信号失败', [
                 'table_id' => $tableId,
                 'error' => $e->getMessage()
             ]);
-            return show([], config('ToConfig.http_code.error'), '开局失败');
+            show([], config('ToConfig.http_code.error'), '开局失败');
         }
     }
     
@@ -244,7 +244,7 @@ class Bet extends BaseController
             LogHelper::warning('结束信号参数错误', [
                 'table_id' => $tableId
             ]);
-            return show([], config('ToConfig.http_code.error'), 'tableId参数错误');
+            show([], config('ToConfig.http_code.error'), 'tableId参数错误');
         }
         
         try {
@@ -268,14 +268,14 @@ class Bet extends BaseController
                 'table_id' => $tableId
             ]);
             
-            return show(['table_id' => $tableId], 1, '停止下注成功');
+            show(['table_id' => $tableId], 1, '停止下注成功');
             
         } catch (\Exception $e) {
             LogHelper::error('发送结束信号失败', [
                 'table_id' => $tableId,
                 'error' => $e->getMessage()
             ]);
-            return show([], config('ToConfig.http_code.error'), '停止下注失败');
+            show([], config('ToConfig.http_code.error'), '停止下注失败');
         }
     }
     
@@ -318,7 +318,7 @@ class Bet extends BaseController
         
         // 参数验证
         if ($tableId <= 0 || $xueNumber <= 0 || $puNumber <= 0) {
-            return show([], config('ToConfig.http_code.error'), '参数不完整');
+            show([], config('ToConfig.http_code.error'), '参数不完整');
         }
         
         try {
@@ -356,14 +356,14 @@ class Bet extends BaseController
             
             Db::commit();
             
-            return show([], 1, '取消成功');
+            show([], 1, '取消成功');
             
         } catch (\Exception $e) {
             Db::rollback();
             LogHelper::error('取消开牌失败', [
                 'error' => $e->getMessage()
             ]);
-            return show([], config('ToConfig.http_code.error'), '取消失败');
+            show([], config('ToConfig.http_code.error'), '取消失败');
         }
     }
 }

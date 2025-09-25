@@ -107,7 +107,7 @@ class CardSettlementService
         }
 
         LogHelper::debug('=== 开牌服务完成 ===');
-        return show([]);
+        show([]);
     }
 
     /**

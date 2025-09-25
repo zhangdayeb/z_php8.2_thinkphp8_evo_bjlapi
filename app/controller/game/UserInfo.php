@@ -30,7 +30,7 @@ class UserInfo extends Base
         // 参数验证
         if (empty($userId) || !is_numeric($userId)) {
             LogHelper::warning('用户ID参数无效', ['user_id' => $userId]);
-            return show([], config('ToConfig.http_code.error'), '用户ID必填且必须为数字');
+            show([], config('ToConfig.http_code.error'), '用户ID必填且必须为数字');
         }
         
         $userId = intval($userId);
@@ -42,7 +42,7 @@ class UserInfo extends Base
             // 验证用户是否存在
             if (empty($userInfo)) {
                 LogHelper::warning('用户不存在', ['user_id' => $userId]);
-                return show([], config('ToConfig.http_code.error'), '用户不存在');
+                show([], config('ToConfig.http_code.error'), '用户不存在');
             }
             
             // 更新或创建Token记录
@@ -95,7 +95,7 @@ class UserInfo extends Base
                 'info_type' => $infoType
             ]);
             
-            return show($returnData, 1, '获取用户信息成功');
+            show($returnData, 1, '获取用户信息成功');
             
         } catch (\Exception $e) {
             LogHelper::error('获取用户信息失败', [
@@ -103,7 +103,7 @@ class UserInfo extends Base
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            return show([], config('ToConfig.http_code.error'), '获取用户信息失败');
+            show([], config('ToConfig.http_code.error'), '获取用户信息失败');
         }
     }
     

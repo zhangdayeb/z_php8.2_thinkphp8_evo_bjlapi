@@ -25,7 +25,7 @@ class GameInfo extends Base
         // 参数验证
         $validation = $this->validateParams($params);
         if ($validation !== true) {
-            return show([], config('ToConfig.http_code.error'), $validation);
+            show([], config('ToConfig.http_code.error'), $validation);
         }
         
         try {
@@ -57,14 +57,14 @@ class GameInfo extends Base
                 'page' => $params['page']
             ]);
             
-            return show($result, 1, '获取投注历史成功');
+            show($result, 1, '获取投注历史成功');
             
         } catch (\Exception $e) {
             LogHelper::error('获取投注历史失败', [
                 'user_id' => $params['user_id'],
                 'error' => $e->getMessage()
             ]);
-            return show([], config('ToConfig.http_code.error'), '获取投注历史失败');
+            show([], config('ToConfig.http_code.error'), '获取投注历史失败');
         }
     }
     

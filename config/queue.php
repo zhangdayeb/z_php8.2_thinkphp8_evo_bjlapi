@@ -27,7 +27,7 @@ return [
             'host'       => env('redis.host', '127.0.0.1'),  // 建议使用 env
             'port'       => env('redis.port', 6379),
             'password'   => env('redis.password', ''),
-            'select'     => 0,
+            'select'     => 1,  // 使用 Redis 的第 1 个数据库
             'timeout'    => 0,
             'persistent' => false,
         ],

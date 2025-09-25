@@ -22,13 +22,13 @@ class Base extends BaseController
     {
         $token = $this->request->header('x-csrf-token');
         if (empty($token)) $token = $this->request->post('token');
-        if (empty($token)) return show([], 505, 'token不存在');
+        if (empty($token)) show([], 505, 'token不存在');
         $res = HomeTokenModel::auth_token($token); //查询token
 
         //查询当前用户信息
         $user_info = UserModel::page_one($res['user_id']);
 
-        if (empty($user_info) || $user_info['status'] != 1) return show([], 503, '用户异常');
+        if (empty($user_info) || $user_info['status'] != 1) show([], 503, '用户异常');
         
         $res['token'] = $token;
         //查询用户洗马什么的信息

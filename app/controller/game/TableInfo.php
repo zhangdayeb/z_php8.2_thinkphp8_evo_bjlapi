@@ -34,7 +34,7 @@ class TableInfo extends BaseController
                 ->toArray();
             
             if (empty($tables)) {
-                return show([], 1, '暂无可用台桌');
+                show([], 1, '暂无可用台桌');
             }
             
             // 处理每个台桌的附加信息
@@ -57,13 +57,13 @@ class TableInfo extends BaseController
                 $tables[$k]['xue_number'] = $luZhu ? $luZhu['xue_number'] : 1;
             }
             
-            return show($tables, 1, '获取台桌列表成功');
+            show($tables, 1, '获取台桌列表成功');
             
         } catch (\Exception $e) {
             LogHelper::error('获取台桌列表失败', [
                 'error' => $e->getMessage()
             ]);
-            return show([], config('ToConfig.http_code.error'), '获取台桌列表失败');
+            show([], config('ToConfig.http_code.error'), '获取台桌列表失败');
         }
     }
     
@@ -78,14 +78,14 @@ public function get_table_info(): string
     
     // 参数验证
     if (empty($tableId) || !is_numeric($tableId)) {
-        return show([], config('ToConfig.http_code.error'), '台桌ID必填且必须为数字');
+        show([], config('ToConfig.http_code.error'), '台桌ID必填且必须为数字');
     }
     
     try {
         // 查询台桌信息
         $tableInfo = Table::find($tableId);
         if (empty($tableInfo)) {
-            return show([], config('ToConfig.http_code.error'), '台桌不存在');
+            show([], config('ToConfig.http_code.error'), '台桌不存在');
         }
         
         // 获取原始数据
@@ -98,14 +98,14 @@ public function get_table_info(): string
         $tableData['xue_number'] = $bureauInfo['xue_number'];
         $tableData['pu_number'] = $bureauInfo['pu_number'];
         
-        return show($tableData, 1, '获取台桌信息成功');
+        show($tableData, 1, '获取台桌信息成功');
         
     } catch (\Exception $e) {
         LogHelper::error('获取台桌信息失败', [
             'table_id' => $tableId,
             'error' => $e->getMessage()
         ]);
-        return show([], config('ToConfig.http_code.error'), '获取台桌信息失败');
+        show([], config('ToConfig.http_code.error'), '获取台桌信息失败');
     }
 }
     
@@ -123,7 +123,7 @@ public function get_table_info(): string
         
         // 参数验证
         if (empty($tableId) || empty($xueNumber)) {
-            return show([], config('ToConfig.http_code.error'), '参数不完整');
+            show([], config('ToConfig.http_code.error'), '参数不完整');
         }
         
         try {
@@ -191,14 +191,14 @@ public function get_table_info(): string
                 'stats' => $returnData
             ]);
             
-            return show($returnData, 1, '获取统计数据成功');
+            show($returnData, 1, '获取统计数据成功');
             
         } catch (\Exception $e) {
             LogHelper::error('获取台桌统计失败', [
                 'table_id' => $tableId,
                 'error' => $e->getMessage()
             ]);
-            return show([], config('ToConfig.http_code.error'), '获取统计数据失败');
+            show([], config('ToConfig.http_code.error'), '获取统计数据失败');
         }
     }
     
@@ -208,43 +208,11 @@ public function get_table_info(): string
      */
     public function get_lz_list(): string
     {
-        $tableId = $this->request->param('tableId', 0);
-        
-        // 参数验证
-        if (empty($tableId)) {
-            return show([], config('ToConfig.http_code.error'), '台桌ID不存在');
-        }
-        
-        try {
-            // 验证台桌是否存在
-            $table = Table::find($tableId);
-            if (empty($table)) {
-                return show([], config('ToConfig.http_code.error'), '台桌不存在');
-            }
-            
-            // 检查洗牌状态
-            if ($table['wash_status'] == 1) {
-                return show([], 1, '正在洗牌中');
-            }
-            
-            // 获取露珠数据
-            $params = $this->request->param();
-            $returnData = Luzhu::LuZhuList($params);
-            
-            LogHelper::debug('获取露珠列表成功', [
-                'table_id' => $tableId,
-                'count' => count($returnData)
-            ]);
-            
-            return show($returnData, 1, '获取露珠列表成功');
-            
-        } catch (\Exception $e) {
-            LogHelper::error('获取露珠列表失败', [
-                'table_id' => $tableId,
-                'error' => $e->getMessage()
-            ]);
-            return show([], config('ToConfig.http_code.error'), '获取露珠列表失败');
-        }
+        $params = $this->request->param();
+        $tableId = $this->request->param('tableId',0);
+        if ($tableId <=0 ) show([], config('ToConfig.http_code.error'),'台桌ID必填');
+        $returnData = Luzhu::LuZhuList($params);        
+        show($returnData, 200, '获取露珠列表成功');
     }
     
     /**
@@ -257,14 +225,14 @@ public function get_table_info(): string
         
         // 参数验证
         if (empty($tableId)) {
-            return show([], config('ToConfig.http_code.error'), '台桌ID必填');
+            show([], config('ToConfig.http_code.error'), '台桌ID必填');
         }
         
         try {
             // 查询台桌
             $table = Table::find($tableId);
             if (empty($table)) {
-                return show([], config('ToConfig.http_code.error'), '台桌不存在');
+                show([], config('ToConfig.http_code.error'), '台桌不存在');
             }
             
             // 切换洗牌状态
@@ -283,14 +251,14 @@ public function get_table_info(): string
                 'message' => $newStatus == 1 ? '开始洗牌' : '洗牌结束'
             ];
             
-            return show($returnData, 1, '操作成功');
+            show($returnData, 1, '操作成功');
             
         } catch (\Exception $e) {
             LogHelper::error('切换洗牌状态失败', [
                 'table_id' => $tableId,
                 'error' => $e->getMessage()
             ]);
-            return show([], config('ToConfig.http_code.error'), '操作失败');
+            show([], config('ToConfig.http_code.error'), '操作失败');
         }
     }
 }
