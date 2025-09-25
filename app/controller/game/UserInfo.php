@@ -1,4 +1,22 @@
     
+    namespace app\controller\game;
+
+use app\controller\common\LogHelper;
+use app\BaseController;
+use app\model\Luzhu;
+use app\model\Table;
+use app\job\TableStartJob;
+use app\service\CardSettlementService;
+use app\validate\BetOrder as validates;
+use think\exception\ValidateException;
+use think\facade\Queue;
+use app\model\UserModel;           // 用户模型
+use app\model\GameRecords;         // 游戏记录模型  
+use think\facade\Db;               // 数据库操作
+use app\business\Curl;
+use app\business\RequestUrl;
+use app\model\HomeTokenModel;
+extends Base
     /**
      * ========================================
      * 获取用户详细信息
