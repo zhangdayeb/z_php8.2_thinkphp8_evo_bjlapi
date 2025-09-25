@@ -33,19 +33,18 @@ class Bet extends BaseController
         $params = $this->request->param();
         LogHelper::debug('荷官原始参数', $params);
         
-        // 过滤和获取必要参数
-        $postField = 'gameType,tableId,xueNumber,puNumber,result,ext,pai_result';
-        $params = $this->request->only(explode(',', $postField), 'param', null);
+        // 处理 pai_result 数组 - 转换为JSON字符串
+        if (isset($params['pai_result']) && is_array($params['pai_result'])) {
+            $params['result_pai'] = json_encode($params['pai_result']);
+        } else {
+            $params['result_pai'] = '';
+        }
         
-        // 参数验证
-        try {
-            validate(validates::class)->scene('lz_post')->check($params);
-        } catch (ValidateException $e) {
-            LogHelper::error('开牌参数验证失败', [
-                'error' => $e->getError(),
-                'params' => $params
-            ]);
-            return show([], config('ToConfig.http_code.error'), $e->getError());
+        // 只验证关键参数，跳过 pai_result 验证
+        if (empty($params['tableId']) || empty($params['gameType']) || 
+            empty($params['xueNumber']) || empty($params['puNumber'])) {
+            LogHelper::error('开牌参数缺失', $params);
+            return show([], config('ToConfig.http_code.error'), '必要参数缺失');
         }
         
         // 检查是否重复开牌
@@ -61,8 +60,8 @@ class Bet extends BaseController
             'xue_number' => $params['xueNumber'],
             'pu_number' => $params['puNumber'],
             'game_type' => $params['gameType'],
-            'result' => $params['result'] ?? '',
-            'pai_result' => $params['pai_result'] ?? ''
+            'result' => $params['result'] ?? 0,
+            'result_pai' => $params['result_pai']
         ];
         
         try {
@@ -72,7 +71,8 @@ class Bet extends BaseController
                     LogHelper::debug('调用百家乐开牌服务', [
                         'table_id' => $openData['table_id'],
                         'xue_number' => $openData['xue_number'],
-                        'pu_number' => $openData['pu_number']
+                        'pu_number' => $openData['pu_number'],
+                        'result_pai' => $openData['result_pai']
                     ]);
                     
                     $cardService = new CardSettlementService();
@@ -95,9 +95,10 @@ class Bet extends BaseController
         } catch (\Exception $e) {
             LogHelper::error('开牌处理失败', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'params' => $openData
             ]);
-            return show([], config('ToConfig.http_code.error'), 'Bet开牌失败：' . $e->getMessage());
+            return show([], config('ToConfig.http_code.error'), '开牌失败：' . $e->getMessage());
         }
     }
     
