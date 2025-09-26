@@ -186,10 +186,6 @@ class Bet extends BaseController
             show([], config('ToConfig.http_code.error'), 'tableId参数错误');
         }
         
-        // 限制倒计时时间范围
-        if ($time < 10 || $time > 120) {
-            $time = 45; // 默认45秒
-        }
         
         try {
             // 更新台桌状态
@@ -206,18 +202,11 @@ class Bet extends BaseController
             if (!$updated) {
                 throw new \Exception('更新台桌状态失败');
             }
-                       
-            // 推送到队列处理
-            $queueData = array_merge($updateData, ['table_id' => $tableId]);
-            Queue::push(TableStartJob::class, $queueData, 'bjl_start_queue');
             
-            LogHelper::info('开局信号发送成功', [
-                'table_id' => $tableId,
-                'countdown' => $time
-            ]);
+            // 设置Redis倒计时
+            redis_set_table_opening_count_down($tableId, time());
             
-            show($queueData, 1, '开局成功');
-            
+            show(['table_id' => $tableId, 'countdown_time' => $time], 1, '开局成功');
         } catch (\Exception $e) {
             LogHelper::error('发送开局信号失败', [
                 'table_id' => $tableId,
@@ -257,6 +246,9 @@ class Bet extends BaseController
             if (!$updated) {
                 throw new \Exception('更新台桌状态失败');
             }
+            
+            // 清除Redis倒计时
+            redis_set_table_opening_count_down($tableId, 0);
             
             LogHelper::info('结束信号发送成功', [
                 'table_id' => $tableId
