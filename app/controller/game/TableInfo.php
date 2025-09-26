@@ -110,98 +110,55 @@ public function get_table_info(): string
 }
     
     /**
-     * 获取台桌统计数据
-     * 统计当天的庄闲和等开奖结果
+     * 获取台桌今日各结果出现次数统计
      * @return string JSON响应
      */
+    
     public function get_table_count(): string
     {
         // 获取参数
         $tableId = $this->request->param('tableId', 0);
-        $xueNumber = $this->request->param('xue', 0);
-        $gameType = $this->request->param('gameType', 3);
-        
-        // 参数验证
-        if (empty($tableId) || empty($xueNumber)) {
-            show([], config('ToConfig.http_code.error'), '参数不完整');
-        }
-        
-        try {
-            // 构建查询条件
-            $map = [
-                'status' => 1,
-                'table_id' => $tableId,
-                'xue_number' => $xueNumber,
-                'game_type' => $gameType
-            ];
-            
-            // 计算统计时间范围（从早上9点开始）
-            $nowTime = time();
-            $startTime = strtotime(date("Y-m-d 09:00:00"));
-            if ($nowTime < $startTime) {
-                $startTime = $startTime - 86400; // 前一天的9点
-            }
-            
-            // 查询各种结果的数量
-            $baseQuery = Luzhu::whereTime('create_time', '>=', date('Y-m-d H:i:s', $startTime))
-                ->where($map);
-            
-            // 统计庄赢（包含所有庄赢的结果码）
-            $zhuangCount = 0;
-            $zhuangResults = ['1|%', '4|%', '6|%', '7|%', '9|%'];
-            foreach ($zhuangResults as $pattern) {
-                $count = (clone $baseQuery)->where('result', 'like', $pattern)->count();
-                $zhuangCount += $count;
-            }
-            
-            // 统计闲赢
-            $xianCount = 0;
-            $xianResults = ['2|%', '8|%'];
-            foreach ($xianResults as $pattern) {
-                $count = (clone $baseQuery)->where('result', 'like', $pattern)->count();
-                $xianCount += $count;
-            }
-            
-            // 统计和
-            $heCount = (clone $baseQuery)->where('result', 'like', '3|%')->count();
-            
-            // 统计对子
-            $zhuangDuiCount = (clone $baseQuery)->where('result', 'like', '%|1')->count();
-            $xianDuiCount = (clone $baseQuery)->where('result', 'like', '%|2')->count();
-            $shuangDuiCount = (clone $baseQuery)->where('result', 'like', '%|3')->count();
-            
-            // 处理双对的情况
-            $zhuangDuiCount += $shuangDuiCount;
-            $xianDuiCount += $shuangDuiCount;
-            
-            // 构建返回数据
-            $returnData = [
-                'zhuang' => $zhuangCount,
-                'xian' => $xianCount,
-                'he' => $heCount,
-                'zhuangDui' => $zhuangDuiCount,
-                'xianDui' => $xianDuiCount,
-                'zhuangXianDui' => $shuangDuiCount,
-                'total' => $zhuangCount + $xianCount + $heCount
-            ];
-            
-            LogHelper::debug('获取台桌统计成功', [
-                'table_id' => $tableId,
-                'xue_number' => $xueNumber,
-                'stats' => $returnData
-            ]);
-            
-            show($returnData, 1, '获取统计数据成功');
-            
-        } catch (\Exception $e) {
-            LogHelper::error('获取台桌统计失败', [
-                'table_id' => $tableId,
-                'error' => $e->getMessage()
-            ]);
-            show([], config('ToConfig.http_code.error'), '获取统计数据失败');
-        }
+        $bureauInfo = xue_number($tableId);
+        $xueNumber = $bureauInfo['xue_number'];
+
+
+        $map = array();
+        $map['status'] = 1;
+        $map['table_id'] = $tableId;
+        $map['xue_number'] = $xueNumber;
+
+
+        $nowTime = time();
+		$startTime = strtotime(date("Y-m-d 09:00:00", time()));
+		// 如果小于，则算前一天的
+		if ($nowTime < $startTime) {
+		    $startTime = $startTime - (24 * 60 * 60);
+		} else {
+		    // 保持不变 这样做到 自动更新 露珠
+		}
+
+        // 需要兼容 龙7 熊8 大小老虎 69 幸运6 
+        $returnData = array();
+        $returnData_zhuang_1 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '1|%')->where($map)->order('id asc')->count();
+        $returnData_zhuang_4 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '4|%')->where($map)->order('id asc')->count();
+        $returnData_zhuang_6 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '6|%')->where($map)->order('id asc')->count();
+        $returnData_zhuang_7 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '7|%')->where($map)->order('id asc')->count();
+        $returnData_zhuang_9 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '9|%')->where($map)->order('id asc')->count();
+		$returnData['zhuang'] = $returnData_zhuang_1 + $returnData_zhuang_4 + $returnData_zhuang_6 + $returnData_zhuang_7 + $returnData_zhuang_9;
+
+        $returnData_xian_2 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '2|%')->where($map)->order('id asc')->count();
+        $returnData_xian_8 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '8|%')->where($map)->order('id asc')->count();
+        $returnData['xian'] = $returnData_xian_2 + $returnData_xian_8;
+
+        $returnData['he'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '3|%')->where($map)->order('id asc')->count();
+        $returnData['zhuangDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|1')->where($map)->order('id asc')->count();
+        $returnData['xianDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|2')->where($map)->order('id asc')->count();
+        $returnData['zhuangXianDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|3')->where($map)->order('id asc')->count();
+        $returnData['zhuangDui'] += $returnData['zhuangXianDui'];
+        $returnData['xianDui'] += $returnData['zhuangXianDui'];
+        // 返回数据
+        show($returnData, 1);
     }
-    
     /**
      * 获取露珠列表
      * @return string JSON响应
