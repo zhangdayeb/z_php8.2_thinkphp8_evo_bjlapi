@@ -189,9 +189,19 @@ function redis_get_user_win_money($user_id, $table_id)
  */
 function redis_get_table_opening_count_down($table_id)
 {
-    $key = 'table_opening_count_down_table_' . $table_id;
-    $data = redis()->get($key);
-    return $data ? $data : 0;
+    $key_start = 'table_opening_count_down_start_table_' . $table_id;
+    $key_down_time = 'table_opening_count_down_time_table_' . $table_id;
+    $tiem_start = redis()->get($key_start);
+    $tiem_down_time = redis()->get($key_down_time);
+    $data = 0;
+    if ($tiem_start && $tiem_down_time) {
+        $data = $tiem_down_time - (time() - $tiem_start);
+        if ($data < 0) {
+            $data = 0;
+        }
+    }
+    return $data;
+    
 }
 
 /**
@@ -199,8 +209,10 @@ function redis_get_table_opening_count_down($table_id)
  * @param int $table_id 台桌ID
  * @return string 倒计时秒数
  */
-function redis_set_table_opening_count_down($table_id, $count_down  = 0)
+function redis_set_table_opening_count_down($table_id, $count_down  = 0, $time = 0)
 {
-    $key = 'table_opening_count_down_table_' . $table_id;
-    $data = redis()->set($key, $count_down);
+    $key_start = 'table_opening_count_down_start_table_' . $table_id;
+    $key_down_time = 'table_opening_count_down_time_table_' . $table_id;
+    redis()->set($key_start, $count_down);
+    redis()->set($key_down_time, $time);
 }

@@ -204,7 +204,7 @@ class Bet extends BaseController
             }
             
             // 设置Redis倒计时
-            redis_set_table_opening_count_down($tableId, time());
+            redis_set_table_opening_count_down($tableId, time(), $time);
             
             show(['table_id' => $tableId, 'countdown_time' => $time], 1, '开局成功');
         } catch (\Exception $e) {
@@ -248,7 +248,7 @@ class Bet extends BaseController
             }
             
             // 清除Redis倒计时
-            redis_set_table_opening_count_down($tableId, 0);
+            redis_set_table_opening_count_down($tableId, 0 , 0);
             
             LogHelper::info('结束信号发送成功', [
                 'table_id' => $tableId
