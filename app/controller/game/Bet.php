@@ -60,7 +60,7 @@ class Bet extends BaseController
             'xue_number' => $params['xueNumber'],
             'pu_number' => $params['puNumber'],
             'game_type' => $params['gameType'],
-            'result' => $params['result'] ?? 0,
+            'result' => $params['result'].'|'.$params['ext'],
             'result_pai' => $params['result_pai']
         ];
         

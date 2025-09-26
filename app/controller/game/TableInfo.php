@@ -211,8 +211,8 @@ public function get_table_info(): string
         $params = $this->request->param();
         $tableId = $this->request->param('tableId',0);
         if ($tableId <=0 ) show([], config('ToConfig.http_code.error'),'台桌ID必填');
-        $returnData = Luzhu::LuZhuList($params);        
-        show($returnData, 200, '获取露珠列表成功');
+        $returnData = Luzhu::LuZhuList($params);     
+        show($returnData);
     }
     
     /**
