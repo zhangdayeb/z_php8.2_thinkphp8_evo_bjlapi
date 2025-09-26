@@ -114,51 +114,66 @@ public function get_table_info(): string
      * @return string JSON响应
      */
     
-    public function get_table_count(): string
-    {
-        // 获取参数
-        $tableId = $this->request->param('tableId', 0);
-        $bureauInfo = xue_number($tableId);
-        $xueNumber = $bureauInfo['xue_number'];
-
-
-        $map = array();
-        $map['status'] = 1;
-        $map['table_id'] = $tableId;
-        $map['xue_number'] = $xueNumber;
-
-
-        $nowTime = time();
-		$startTime = strtotime(date("Y-m-d 09:00:00", time()));
-		// 如果小于，则算前一天的
-		if ($nowTime < $startTime) {
-		    $startTime = $startTime - (24 * 60 * 60);
-		} else {
-		    // 保持不变 这样做到 自动更新 露珠
-		}
-
-        // 需要兼容 龙7 熊8 大小老虎 69 幸运6 
-        $returnData = array();
-        $returnData_zhuang_1 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '1|%')->where($map)->order('id asc')->count();
-        $returnData_zhuang_4 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '4|%')->where($map)->order('id asc')->count();
-        $returnData_zhuang_6 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '6|%')->where($map)->order('id asc')->count();
-        $returnData_zhuang_7 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '7|%')->where($map)->order('id asc')->count();
-        $returnData_zhuang_9 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '9|%')->where($map)->order('id asc')->count();
-		$returnData['zhuang'] = $returnData_zhuang_1 + $returnData_zhuang_4 + $returnData_zhuang_6 + $returnData_zhuang_7 + $returnData_zhuang_9;
-
-        $returnData_xian_2 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '2|%')->where($map)->order('id asc')->count();
-        $returnData_xian_8 = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '8|%')->where($map)->order('id asc')->count();
-        $returnData['xian'] = $returnData_xian_2 + $returnData_xian_8;
-
-        $returnData['he'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '3|%')->where($map)->order('id asc')->count();
-        $returnData['zhuangDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|1')->where($map)->order('id asc')->count();
-        $returnData['xianDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|2')->where($map)->order('id asc')->count();
-        $returnData['zhuangXianDui'] = Luzhu::whereTime('create_time','>=', date('Y-m-d H:i:s',$startTime))->where('result', 'like', '%|3')->where($map)->order('id asc')->count();
-        $returnData['zhuangDui'] += $returnData['zhuangXianDui'];
-        $returnData['xianDui'] += $returnData['zhuangXianDui'];
-        // 返回数据
-        show($returnData, 1);
+/**
+ * 获取台桌今日各结果出现次数统计
+ * @return string JSON响应
+ */
+public function get_table_count(): string
+{
+    // 获取参数
+    $tableId = $this->request->param('tableId', 0);
+    
+    // 参数验证
+    if (empty($tableId)) {
+        show([], config('ToConfig.http_code.error'), '台桌ID必填');
     }
+    
+    // 获取靴号
+    $bureauInfo = xue_number($tableId);
+    $xueNumber = $bureauInfo['xue_number'];
+
+    // 构建查询条件
+    $map = [
+        'status' => 1,
+        'table_id' => $tableId,
+        'xue_number' => $xueNumber
+    ];
+
+    // 初始化返回数据
+    $returnData = [];
+    
+    // 统计庄赢（result第一位为1,4,6,7,9）
+    $returnData_zhuang_1 = Luzhu::where('result', 'like', '1|%')->where($map)->count();
+    $returnData_zhuang_4 = Luzhu::where('result', 'like', '4|%')->where($map)->count();
+    $returnData_zhuang_6 = Luzhu::where('result', 'like', '6|%')->where($map)->count();
+    $returnData_zhuang_7 = Luzhu::where('result', 'like', '7|%')->where($map)->count();
+    $returnData_zhuang_9 = Luzhu::where('result', 'like', '9|%')->where($map)->count();
+    $returnData['zhuang'] = $returnData_zhuang_1 + $returnData_zhuang_4 + $returnData_zhuang_6 + $returnData_zhuang_7 + $returnData_zhuang_9;
+
+    // 统计闲赢（result第一位为2,8）
+    $returnData_xian_2 = Luzhu::where('result', 'like', '2|%')->where($map)->count();
+    $returnData_xian_8 = Luzhu::where('result', 'like', '8|%')->where($map)->count();
+    $returnData['xian'] = $returnData_xian_2 + $returnData_xian_8;
+
+    // 统计和（result第一位为3）
+    $returnData['he'] = Luzhu::where('result', 'like', '3|%')->where($map)->count();
+    
+    // 统计庄对（result第二位为1）
+    $returnData['zhuangDui'] = Luzhu::where('result', 'like', '%|1')->where($map)->count();
+    
+    // 统计闲对（result第二位为2）
+    $returnData['xianDui'] = Luzhu::where('result', 'like', '%|2')->where($map)->count();
+    
+    // 统计庄闲对（result第二位为3）
+    $returnData['zhuangXianDui'] = Luzhu::where('result', 'like', '%|3')->where($map)->count();
+    
+    // 庄闲对同时计入庄对和闲对
+    $returnData['zhuangDui'] += $returnData['zhuangXianDui'];
+    $returnData['xianDui'] += $returnData['zhuangXianDui'];
+    
+    // 返回数据
+    show($returnData, 1);
+}
     /**
      * 获取露珠列表
      * @return string JSON响应
