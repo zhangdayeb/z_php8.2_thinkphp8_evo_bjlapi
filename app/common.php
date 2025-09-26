@@ -194,13 +194,3 @@ function redis_get_table_opening_count_down($table_id)
     return $data ? $data : 0;
 }
 
-/**
- * 从 Redis 获取台桌开牌倒计时
- * @param int $table_id 台桌ID
- * @return string 倒计时秒数
- */
-function redis_set_table_opening_count_down($table_id, $count_down  = 0)
-{
-    $key = 'table_opening_count_down_table_' . $table_id;
-    $data = redis()->set($key, $count_down);
-}

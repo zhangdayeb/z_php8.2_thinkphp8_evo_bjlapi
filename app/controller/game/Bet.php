@@ -206,10 +206,7 @@ class Bet extends BaseController
             if (!$updated) {
                 throw new \Exception('更新台桌状态失败');
             }
-            
-            // 设置Redis倒计时
-            redis_set_table_opening_count_down($tableId, $time);
-            
+                       
             // 推送到队列处理
             $queueData = array_merge($updateData, ['table_id' => $tableId]);
             Queue::push(TableStartJob::class, $queueData, 'bjl_start_queue');
@@ -260,9 +257,6 @@ class Bet extends BaseController
             if (!$updated) {
                 throw new \Exception('更新台桌状态失败');
             }
-            
-            // 清除Redis倒计时
-            redis_set_table_opening_count_down($tableId, 0);
             
             LogHelper::info('结束信号发送成功', [
                 'table_id' => $tableId
