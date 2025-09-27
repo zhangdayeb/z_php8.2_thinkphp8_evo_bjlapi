@@ -175,9 +175,9 @@ function redis_get_table_opening_count_down($table_id)
             $data = 0;
         }
     }
-    LogHelper::debug('倒计时==>调试信息1', [$key_start => $time_start]); 
-    LogHelper::debug('倒计时==>调试信息2', [$key_down_time => $time_down_time]); 
-    LogHelper::debug('倒计时==>调试信息3', ['back_data_time' => $data]); 
+    // LogHelper::debug('倒计时==>调试信息1', [$key_start => $time_start]); 
+    // LogHelper::debug('倒计时==>调试信息2', [$key_down_time => $time_down_time]); 
+    // LogHelper::debug('倒计时==>调试信息3', ['back_data_time' => $data]); 
     return $data;
     
 }
