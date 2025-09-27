@@ -1,5 +1,7 @@
 <?php
 
+use app\controller\common\LogHelper;
+
 /**
  * 获取 Redis 实例
  * @return mixed Redis 存储实例
@@ -9,33 +11,6 @@ function redis()
     return think\facade\Cache::store('redis');
 }
 
-/**
- * Redis 有序集合操作
- * @param string $type 操作类型 (set/get/del)
- * @param string $name 集合名称
- * @param int $key 集合成员
- * @param int $val 集合分数（仅 set 操作需要）
- * @return mixed 操作结果
- */
-function redis_sort_set(string $type = 'set', string $name = '', int $key = 0, int $val = 0)
-{
-    switch ($type) {
-        case 'set':
-            // 向有序集合添加成员
-            return redis()->ZADD($name, $key, $val);
-        
-        case 'get':
-            // 获取有序集合中指定成员的分数
-            return redis()->ZSCORE($name, $key);
-        
-        case 'del':
-            // 从有序集合中删除指定成员
-            return redis()->ZREM($name, $key);
-        
-        default:
-            return false;
-    }
-}
 
 /**
  * 生成台桌局号
@@ -193,6 +168,8 @@ function redis_get_table_opening_count_down($table_id)
     $key_down_time = 'table_opening_count_down_time_table_' . $table_id;
     $tiem_start = redis()->get($key_start);
     $tiem_down_time = redis()->get($key_down_time);
+    LogHelper::debug('LogHelper调试信息1', ['test' => $tiem_start]); 
+    LogHelper::debug('LogHelper调试信息2', ['test' => $tiem_down_time]); 
     $data = 0;
     if ($tiem_start && $tiem_down_time) {
         $data = $tiem_down_time - (time() - $tiem_start);
@@ -200,6 +177,7 @@ function redis_get_table_opening_count_down($table_id)
             $data = 0;
         }
     }
+    echo $data; //调试
     return $data;
     
 }
