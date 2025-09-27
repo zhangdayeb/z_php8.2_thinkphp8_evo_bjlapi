@@ -166,18 +166,18 @@ function redis_get_table_opening_count_down($table_id)
 {
     $key_start = 'table_opening_count_down_start_table_' . $table_id;
     $key_down_time = 'table_opening_count_down_time_table_' . $table_id;
-    $tiem_start = redis()->get($key_start);
-    $tiem_down_time = redis()->get($key_down_time);
-    LogHelper::debug('LogHelper调试信息1', ['test' => $tiem_start]); 
-    LogHelper::debug('LogHelper调试信息2', ['test' => $tiem_down_time]); 
+    $time_start = redis()->get($key_start);
+    $time_down_time = redis()->get($key_down_time);
     $data = 0;
-    if ($tiem_start && $tiem_down_time) {
-        $data = $tiem_down_time - (time() - $tiem_start);
+    if ($time_start != 0 && $time_down_time != 0) {
+        $data = $time_down_time - (time() - $time_start);
         if ($data < 0) {
             $data = 0;
         }
     }
-    echo $data; //调试
+    LogHelper::debug('倒计时==>调试信息1', [$key_start => $time_start]); 
+    LogHelper::debug('倒计时==>调试信息2', [$key_down_time => $time_down_time]); 
+    LogHelper::debug('倒计时==>调试信息3', ['back_data_time' => $data]); 
     return $data;
     
 }
