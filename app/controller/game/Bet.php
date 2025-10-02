@@ -359,8 +359,7 @@ class Bet extends BaseController
         $params = $this->request->param();
         $table_id = isset($params['tableId']) ? $params['tableId'] : null;
         $data = Db::name('see_pai_temp')
-                ->where('tableid', $table_id)
-                ->field('tableid, position, card')
+                ->where('tableId', $table_id)
                 ->select();
         $data_save = [
             1 => "0|0",
@@ -394,6 +393,7 @@ class Bet extends BaseController
         // 存入Redis（设置过期时间为3秒）
         // 设置Redis key
         $redis_key = 'pai_info_table_temp_' . $table_id;
+        echo $json_data;
         redis()->set($redis_key, $json_data, 3);
     }
 }

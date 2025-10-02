@@ -143,7 +143,7 @@ function redis_get_pai_info($table_id)
 
     $key = 'pai_info_table_temp_' . $table_id;
     $data = redis()->get($key);
-    return $data ? $data : '{"1":"10|0","2":"0|0","3":"0|0","4":"0|0","5":"0|0","6":"0|0"}';
+    return $data ? $data : '{"1":"0|0","2":"0|0","3":"0|0","4":"0|0","5":"0|0","6":"0|0"}';
 }
 
 
