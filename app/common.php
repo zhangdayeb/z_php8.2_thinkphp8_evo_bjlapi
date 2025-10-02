@@ -125,25 +125,23 @@ function get_config($name = null)
  * @param int $table_id 台桌ID
  * @return string 牌局信息
  */
-function redis_get_pai_info($table_id)
+function redis_get_pai_info_正常展示结果的版本($table_id)
 {
     $key = 'pai_info_table_' . $table_id;
     $data = redis()->get($key);
     return $data ? $data : '{"1":"11|r","2":"5|f","3":"0|0","4":"7|f","5":"8|f","6":"9|f"}';
 }
-
 /**
- * 从 Redis 获取临时牌局信息
+ * 从 Redis 获取牌局信息  过程数据获取版本
  * @param int $table_id 台桌ID
- * @return string 临时牌局信息
+ * @return string 牌局信息
  */
-function redis_get_pai_info_temp($table_id)
+function redis_get_pai_info($table_id)
 {
-    $key = 'pai_info_temp_table_' . $table_id;
+    $key = 'pai_info_table_temp_' . $table_id;
     $data = redis()->get($key);
     return $data ? $data : '{"1":"11|r","2":"5|f","3":"0|0","4":"7|f","5":"8|f","6":"9|f"}';
 }
-
 /**
  * 从 Redis 获取用户赢钱金额
  * @param int $user_id 用户ID
