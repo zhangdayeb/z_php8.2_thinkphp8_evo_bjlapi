@@ -352,4 +352,48 @@ class Bet extends BaseController
             show([], config('ToConfig.http_code.error'), '取消失败');
         }
     }
+
+        // 从数据库获取临时数据并存入Redis
+    public function get_temp_data_from_db()
+    {
+        $params = $this->request->param();
+        $table_id = isset($params['tableId']) ? $params['tableId'] : null;
+        $data = Db::name('see_pai_temp')
+                ->where('tableid', $table_id)
+                ->field('tableid, position, card')
+                ->select();
+        $data_save = [
+            1 => "0|0",
+            2 => "0|0",
+            3 => "0|0",
+            4 => "0|0",
+            5 => "0|0",
+            6 => "0|0"
+        ];
+        foreach($data as $key => $value) {
+            if($value['position'] == 'zhuang_1') {
+                $data_save[1] = $value['card'];
+            }
+            if($value['position'] == 'zhuang_2') {
+                $data_save[2] = $value['card'];
+            }
+            if($value['position'] == 'zhuang_3') {
+                $data_save[3] = $value['card'];
+            }
+            if($value['position'] == 'xian_1') {
+                $data_save[4] = $value['card'];
+            }
+            if($value['position'] == 'xian_2') {
+                $data_save[5] = $value['card'];     
+            }
+            if($value['position'] == 'xian_3') {
+                $data_save[6] = $value['card'];
+            }
+        }
+        $json_data = json_encode($data_save, JSON_UNESCAPED_UNICODE);
+        // 存入Redis（设置过期时间为3秒）
+        // 设置Redis key
+        $redis_key = 'pai_info_table_temp_' . $table_id;
+        redis()->set($redis_key, $json_data, 3);
+    }
 }
