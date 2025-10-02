@@ -101,6 +101,7 @@ $worker->onWorkerStart = function ($worker) {
                      * 从Redis获取游戏数据 每个人 链接的 桌子 数据 都可能不一样
                      */
                     // 获取当局开牌牌型
+                    get_temp_data_from_db();
                     $pai_info = redis_get_pai_info($table_id);
                     
                     // 获取用户中奖金额

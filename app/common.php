@@ -140,131 +140,89 @@ function redis_get_pai_info_正常展示结果的版本($table_id)
  */
 function redis_get_pai_info($table_id)
 {
+
     $key = 'pai_info_table_temp_' . $table_id;
-    
-    // 1. 尝试从 Redis 获取缓存
-    $cached_data = redis()->get($key);
-    if ($cached_data !== false && $cached_data !== null) {
-        return $cached_data;
-    }
-    
-    // 2. 缓存不存在，从数据库查询
-    $db_data = get_pai_info_from_db($table_id);
-    
-    // 3. 格式化数据
-    $formatted_data = format_pai_data($db_data);
-    
-    // 4. 存入 Redis，设置 1 秒过期时间
-    redis()->setex($key, 1, $formatted_data);
-    
-    // 5. 返回格式化后的数据
-    return $formatted_data;
+    $data = redis()->get($key);
+    return $data ? $data : '{"1":"10|0","2":"0|0","3":"0|0","4":"0|0","5":"0|0","6":"0|0"}';
 }
 
-/**
- * 从数据库获取牌局信息
- * @param int $table_id 台桌ID
- * @return array 数据库查询结果
- */
-function get_pai_info_from_db($table_id)
-{
-    // 使用 ThinkPHP 8 的数据库操作
-    $result = \think\facade\Db::name('see_pai_temp')
-        ->where('table_id', $table_id)
-        ->field('position, card')  // 字段名改为 card
-        ->select()
-        ->toArray();
-    
-    return $result ?: [];
-}
 
 /**
- * 格式化牌局数据
- * @param array $db_data 数据库查询结果
- * @return string JSON格式的牌局信息
+ * 从数据库读取牌局临时数据并存入Redis
+ * @return bool 是否成功
  */
-function format_pai_data($db_data)
+function get_temp_data_from_db()
 {
-    // 位置映射关系
-    $position_map = [
-        'zhuang_1' => '1',
-        'zhuang_2' => '2',
-        'zhuang_3' => '3',
-        'xian_1'   => '4',
-        'xian_2'   => '5',
-        'xian_3'   => '6'
-    ];
-    
-    // 初始化所有位置为 "0|0"
-    $result = [
-        '1' => '0|0',
-        '2' => '0|0',
-        '3' => '0|0',
-        '4' => '0|0',
-        '5' => '0|0',
-        '6' => '0|0'
-    ];
-    
-    // 遍历数据库结果，填充实际数据
-    foreach ($db_data as $row) {
-        $position = $row['position'] ?? '';
-        $card = $row['card'] ?? '';  // 字段名改为 card
+    try {
+        // 使用name函数，自动加上表前缀
+        $data = \think\facade\Db::name('see_pai_temp')
+            ->field('tableid, position, card')
+            ->select();
         
-        // 检查位置是否有效
-        if (!isset($position_map[$position])) {
-            continue;
+        // 如果没有数据，返回false
+        if (empty($data)) {
+            return false;
         }
         
-        // 解析 card（格式如：10h, 1m）
-        $parsed_card = parse_card($card);
-        if ($parsed_card === null) {
-            continue;
+        // 按table_id分组整理数据
+        $grouped_data = [];
+        foreach ($data as $row) {
+            $table_id = $row['tableid'];
+            
+            // 初始化该table_id的数据
+            if (!isset($grouped_data[$table_id])) {
+                $grouped_data[$table_id] = [];
+            }
+            
+            // 处理position字段，提取数字
+            // position格式：xian_1, zhuang_1, xian_2, zhuang_2, xian_3
+            $position_parts = explode('_', $row['position']);
+            if (count($position_parts) >= 2) {
+                $pos_num = $position_parts[1]; // 获取位置编号（1,2,3等）
+                
+                // 处理card字段
+                // card格式：12|r, 13|r, 10|m 等
+                $card = $row['card'];
+                
+                // 存入对应table_id的数组
+                $grouped_data[$table_id][$pos_num] = $card;
+            }
         }
         
-        // 更新对应位置的数据
-        $pos_key = $position_map[$position];
-        $result[$pos_key] = $parsed_card;
+        // 将每个table_id的数据存入Redis
+        $success_count = 0;
+        foreach ($grouped_data as $table_id => $positions) {
+            // 确保有完整的6个位置，没有的位置填充默认值
+            $complete_data = [];
+            for ($i = 1; $i <= 6; $i++) {
+                if (isset($positions[$i])) {
+                    $complete_data[(string)$i] = $positions[$i];
+                } else {
+                    // 没有数据的位置使用默认值
+                    $complete_data[(string)$i] = "0|0";
+                }
+            }
+            
+            // 转换为JSON格式
+            $json_data = json_encode($complete_data, JSON_UNESCAPED_UNICODE);
+            
+            // 设置Redis key
+            $key = 'pai_info_table_temp_' . $table_id;
+            
+            // 存入Redis（设置过期时间为1小时）
+            redis()->set($key, $json_data, 3600);
+            
+            $success_count++;
+        }
+        
+        return $success_count > 0;
+        
+    } catch (\Exception $e) {
+        // 错误处理，可以记录日志
+        // LogHelper::error('获取牌局临时数据失败', ['error' => $e->getMessage()]);
+        return false;
     }
-    
-    // 返回 JSON 格式字符串
-    return json_encode($result, JSON_UNESCAPED_UNICODE);
 }
-
-/**
- * 解析卡片数据
- * @param string $card 原始卡片数据 (如 '10h', '1m', '13f')
- * @return string|null 格式化后的卡片信息 (如 '10|h') 或 null
- */
-function parse_card($card)
-{
-    // 检查 card 是否为空
-    if (empty($card)) {
-        return null;
-    }
-    
-    // 使用正则表达式解析 card
-    // 格式：数字(1-13) + 花色字母(f/r/h/m)
-    if (!preg_match('/^(\d{1,2})([frhm])$/i', $card, $matches)) {
-        return null;
-    }
-    
-    $number = $matches[1];           // 数字
-    $suit = strtolower($matches[2]); // 花色（转小写）
-    
-    // 检查数字是否有效 (1-13)
-    if ($number < 1 || $number > 13) {
-        return null;
-    }
-    
-    // 检查花色是否有效
-    if (!in_array($suit, ['f', 'r', 'h', 'm'])) {
-        return null;
-    }
-    
-    // 返回格式化的字符串
-    return $number . '|' . $suit;
-}
-
 /**
  * 从 Redis 获取用户赢钱金额
  * @param int $user_id 用户ID
