@@ -129,7 +129,7 @@ function redis_get_pai_info($table_id)
 {
     $key = 'pai_info_table_' . $table_id;
     $data = redis()->get($key);
-    return $data ? $data : '';
+    return $data ? $data : '{"1":"11|r","2":"5|f","3":"0|0","4":"7|f","5":"8|f","6":"9|f"}';
 }
 
 /**
@@ -141,7 +141,7 @@ function redis_get_pai_info_temp($table_id)
 {
     $key = 'pai_info_temp_table_' . $table_id;
     $data = redis()->get($key);
-    return $data ? $data : '';
+    return $data ? $data : '{"1":"11|r","2":"5|f","3":"0|0","4":"7|f","5":"8|f","6":"9|f"}';
 }
 
 /**
