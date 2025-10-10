@@ -174,7 +174,7 @@ class Order extends Base
                 'before_amt' => $user_money,
                 'end_amt' => $user_money - $value['money'],
                 'bet_amt' => $value['money'],
-                'win_amt' => $value['rate_info_name'] * $value['money'],
+                'win_amt' => $value['rate_info_peilv'] * $value['money'],
                 'shuffling_num' => $value['money'],
                 'shuffling_amt' => 0,
                 'shuffling_rate' => self::$user['xima_lv'] / 100,
