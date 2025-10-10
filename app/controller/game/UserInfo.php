@@ -47,14 +47,20 @@ class UserInfo extends Base
             
             $token = $this->request->header('x-csrf-token');
             $HomeTokenModel = new HomeTokenModel();
-            //查询是否存在这条token的用户
-            $update = $HomeTokenModel->where('user_id', $userInfo['id'])
-                ->update(['token' => $token, 'create_time' => date('Y-m-d H:i:s')]);
 
-            //数据不存在时插入
-            if ($update == 0) {
+            //先查询该用户是否已有token记录
+            $existingToken = $HomeTokenModel->where('user_id', $userInfo['id'])->find();
+
+            if ($existingToken) {
+                //如果存在,更新token和时间
+                $HomeTokenModel->where('user_id', $userInfo['id'])
+                    ->update(['token' => $token, 'create_time' => date('Y-m-d H:i:s')]);
+            } else {
+                //如果不存在,插入新记录
                 $HomeTokenModel->insert([
-                    'token' => $token, 'user_id' => $userInfo['id'], 'create_time' => date('Y-m-d H:i:s')
+                    'token' => $token,
+                    'user_id' => $userInfo['id'],
+                    'create_time' => date('Y-m-d H:i:s')
                 ]);
             }
             
