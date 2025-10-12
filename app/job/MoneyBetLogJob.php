@@ -72,11 +72,16 @@ class MoneyBetLogJob
             }
             
             LogHelper::debug('查询到投注记录数量：' . count($betRecords));
-            
+
             // 获取开牌结果信息
             $pai_info = $data['pai_info'];
-            $luzhu_id = $data['search']['luzhu_id'] ?? 0;
-            
+            $luzhu_id = $data['luzhu_id'] ?? 0;  // 🔥 修正：从根级别获取 luzhu_id，而不是从 search 中
+
+            LogHelper::debug('获取露珠ID', [
+                'luzhu_id' => $luzhu_id,
+                'data_keys' => array_keys($data)
+            ]);
+
             // 2. 遍历每条投注记录进行结算
             foreach ($betRecords as $record) {
                 $this->processBetRecord($record, $pai_info, $luzhu_id);

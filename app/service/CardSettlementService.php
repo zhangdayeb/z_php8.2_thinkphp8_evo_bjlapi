@@ -149,7 +149,8 @@ class CardSettlementService
         $jobData = [
             'search' => $this->search_array,
             'pai_info' => $res,
-            'result_pai' => $post['result_pai']
+            'result_pai' => $post['result_pai'],
+            'luzhu_id' => $post['luzhu_id'] ?? 0  // 传递露珠ID
         ];
         Queue::push(MoneyBetLogJob::class, $jobData, 'bjl_money_log_queue');
         
