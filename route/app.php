@@ -39,7 +39,7 @@ Route::rule('bjl/get_table/add_xue$', '/game.Bet/set_xue_number');
 // 手动开牌
 Route::rule('bjl/get_table/post_data$', '/game.Bet/set_post_data');
 
-// 更新缓存
+// 更新缓存 | 扫牌程序通知更新内容
 Route::rule('bjl/table_card/update$', '/game.Bet/get_temp_data_from_db');
 
 // ========== 用户相关 ==========

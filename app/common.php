@@ -122,23 +122,25 @@ function get_config($name = null)
 
 /**
  * 从 Redis 获取牌局信息
+ * 这里的信息存入是 前端发送结果的时候 存入的 为了兼容 现场 识别的牌型
  * @param int $table_id 台桌ID
  * @return string 牌局信息
  */
-function redis_get_pai_info_正常展示结果的版本($table_id)
+function redis_get_pai_info($table_id)
 {
     $key = 'pai_info_table_' . $table_id;
     $data = redis()->get($key);
-    return $data ? $data : '{"1":"11|r","2":"5|f","3":"0|0","4":"7|f","5":"8|f","6":"9|f"}';
+    return $data ? $data : '{"1":"0|0","2":"0|0","3":"0|0","4":"0|0","5":"0|0","6":"0|0"}';
 }
 
 
 /**
  * 从 Redis 获取牌局信息  过程数据获取版本
+ * 这个里面的信息存入是 其他程序存入的 是跨程序存入的 这个主要是为了兼容 扫牌器的 逐个输入
  * @param int $table_id 台桌ID
  * @return string 牌局信息
  */
-function redis_get_pai_info($table_id)
+function redis_get_pai_info_temp($table_id)
 {
 
     $key = 'pai_info_table_temp_' . $table_id;

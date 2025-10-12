@@ -102,6 +102,7 @@ $worker->onWorkerStart = function ($worker) {
                      */
                     // 获取当局开牌牌型
                     $pai_info = redis_get_pai_info($table_id);
+                    $pai_info_temp = redis_get_pai_info_temp($table_id);
                     
                     // 获取用户中奖金额
                     $win_or_loss_info = redis_get_user_win_money($user_id, $table_id);
@@ -114,6 +115,7 @@ $worker->onWorkerStart = function ($worker) {
                         'code' => 200,
                         'msg' => 'WebSocket 返回信息',
                         'pai_info' => $pai_info,
+                        'pai_info_temp' => $pai_info_temp,
                         'win_or_loss_info' => $win_or_loss_info,
                         'table_opening_count_down' => $table_opening_count_down
                     ]));
