@@ -97,23 +97,21 @@ $worker->onWorkerStart = function ($worker) {
                 $table_id = $data['table_id'];
                 
                 try {
-                    /**
-                     * 从Redis获取游戏数据 每个人 链接的 桌子 数据 都可能不一样
-                     */
                     // 获取当局开牌牌型
                     $pai_info = redis_get_pai_info($table_id);
+                    // 发牌过程信息 扫牌器 通知远程 缓存到 redis 数据库里面 通过 key 获取的
                     $pai_info_temp = redis_get_pai_info_temp($table_id);
                     
                     // 获取用户中奖金额
                     $win_or_loss_info = redis_get_user_win_money($user_id, $table_id);
                     
-                    // 获取开牌倒计时
+                    // 获取开牌倒计时 | 很关键 前端的时间钟
                     $table_opening_count_down = redis_get_table_opening_count_down($table_id);
 
                     // 向客户端推送数据
                     $connection->send(json_encode([
                         'code' => 200,
-                        'msg' => 'WebSocket 返回信息',
+                        'msg' => 'websocket is ok!',
                         'pai_info' => $pai_info,
                         'pai_info_temp' => $pai_info_temp,
                         'win_or_loss_info' => $win_or_loss_info,
